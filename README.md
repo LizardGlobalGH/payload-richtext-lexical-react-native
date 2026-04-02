@@ -26,7 +26,7 @@ First, build the package:
 npm run build
 ```
 
-Then, copy the built files from the `dist` directory to your project's `node_modules`:
+Then, copy the built files from the `dist` directory to your project's `modules` directory (or wherever you manage internal packages). For example:
 
 ```bash
 cp -r dist/* YOUR_PROJECT/modules/richtext-lexical
