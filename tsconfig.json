@@ -1,9 +1,25 @@
 {
-  "extends": "../../tsconfig.base.json",
-  "references": [
-    { "path": "../payload" },
-    { "path": "../translations" },
-    { "path": "../ui" },
-    { "path": "../next" }
-  ]
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "lib": ["DOM", "DOM.Iterable", "ES2022"],
+    "jsx": "react-jsx",
+    "declaration": true,
+    "declarationMap": true,
+    "sourceMap": true,
+    "rootDir": "./src",
+    "outDir": "./dist",
+    "strict": false,
+    "skipLibCheck": true,
+    "allowSyntheticDefaultImports": true,
+    "esModuleInterop": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "forceConsistentCasingInFileNames": true,
+    "noEmit": false,
+    "types": ["node", "react", "react-dom"]
+  },
+  "include": ["src/**/*"],
+  "exclude": ["dist", "node_modules", "**/*.spec.ts", "**/*.spec.tsx"]
 }

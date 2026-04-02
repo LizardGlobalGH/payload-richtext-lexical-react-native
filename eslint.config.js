@@ -1,9 +1,42 @@
-import lexical from '@lexical/eslint-plugin'
-import { rootEslintConfig, rootParserOptions } from '../../eslint.config.js'
+import payloadEsLintConfig from '@payloadcms/eslint-config'
+import payloadPlugin from '@payloadcms/eslint-plugin'
+import { dirname } from 'path'
+import { fileURLToPath } from 'url'
 
-/** @typedef {import('eslint').Linter.Config} Config */
+const __dirname = dirname(fileURLToPath(import.meta.url))
 
-/** @type {Config[]} */
-export const index = [...rootEslintConfig]
-
-export default index
+/** @type {import('eslint').Linter.Config[]} */
+export default [
+  ...payloadEsLintConfig,
+  {
+    ignores: [
+      '**/.temp',
+      '**/.*',
+      '**/.git',
+      '**/tsconfig.tsbuildinfo',
+      '**/dist/',
+      '**/build/',
+      '**/node_modules/',
+      'src/**/*.spec.ts',
+    ],
+  },
+  {
+    languageOptions: {
+      parserOptions: {
+        project: true,
+        tsconfigRootDir: __dirname,
+      },
+    },
+  },
+  {
+    plugins: {
+      payload: payloadPlugin,
+    },
+    rules: {
+      'payload/no-jsx-import-statements': 'warn',
+      'payload/no-imports-from-exports-dir': 'error',
+      'payload/no-imports-from-self': 'error',
+      'payload/proper-payload-logger-usage': 'error',
+    },
+  },
+]

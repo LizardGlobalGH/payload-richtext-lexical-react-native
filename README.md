@@ -1,362 +1,114 @@
-# Payload Lexical Rich Text Editor
+> [!] This package is an extracted fork of the `@payloadcms/richtext-lexical` package.
 
-Lexical Rich Text Editor for [Payload](https://payloadcms.com).
+This package provides a React Native implementation of the Rich Text Renderer for serialized Lexical Editor content forked from `@payloadcms/richtext-lexical`. It includes components and utilities for rendering and managing rich text content in a React Native application.
 
-- [Main Repository](https://github.com/payloadcms/payload)
-- [Payload Docs](https://payloadcms.com/docs)
+# Integration
 
-## Installation
+There are two ways to integrate this package into your project: either by installing it as a dependency or by integrating it internally without publishing. Until the package is published, you can use the following steps to integrate it internally.
+
+## Externally (coming soon)
+
+The integration is planned to be open-sourced at `payload-richtext-lexical` and/or `@lizardglobal/payload-richtext-lexical` once stable. To use, import the `RichText` component from the package and pass the serialized Lexical content as a prop:
+
+```tsx
+import { RichText } from "@lizardglobal/payload-richtext-lexical/react-native";
+import { Text } from "@/components/reusable/text";
+
+<RichText data={serializedLexicalContent} primitives={{ Text }} />
+```
+
+
+## Internally
+
+First, build the package:
 
 ```bash
-npm install @payloadcms/richtext-lexical
+npm run build
 ```
 
-## Usage
+Then, copy the built files from the `dist` directory to your project's `node_modules`:
 
-```ts
-import { buildConfig } from 'payload'
-import { lexicalEditor } from '@payloadcms/richtext-lexical'
-
-export default buildConfig({
-  editor: lexicalEditor({}),
-  // ...rest of config
-})
+```bash
+cp -r dist/* YOUR_PROJECT/modules/richtext-lexical
 ```
 
-More detailed usage can be found in the [Payload Docs](https://payloadcms.com/docs/configuration/overview).
-
-## React Native Renderer
-
-This package also ships a renderer-only React Native entrypoint:
-
-```ts
-import { RichText } from '@payloadcms/richtext-lexical/react-native'
-```
-
-This is intended for rendering serialized Lexical content in React Native or Expo apps. It does not include editor functionality.
-
-### Basic Usage
-
+Finally, you can import the package in your project as follows:
 ```tsx
-import { RichText } from '@payloadcms/richtext-lexical/react-native'
+import { RichText } from '@/modules/richtext-lexical/exports/react-native'
 
-export function ArticleBody({ data }: { data: any }) {
-  return <RichText data={data} />
-}
-```
-
-### Simple Reproducible Example
-
-The example below is intentionally minimal and can be pasted into a new Expo screen.
-It demonstrates the smallest useful setup with:
-
-- Serialized Lexical input
-- The React Native `RichText` renderer
-- External link handling
-
-```tsx
-import * as Linking from 'expo-linking'
-import { SafeAreaView, ScrollView } from 'react-native'
-import { RichText } from '@payloadcms/richtext-lexical/react-native'
-
-const sampleLexical = {
-  root: {
-    children: [
-      {
-        type: 'heading',
-        tag: 'h2',
-        version: 1,
-        children: [
-          {
-            detail: 0,
-            format: 0,
-            mode: 'normal',
-            style: '',
-            text: 'Hello from Payload',
-            type: 'text',
-            version: 1,
-          },
-        ],
-      },
-      {
-        type: 'paragraph',
-        version: 1,
-        children: [
-          {
-            detail: 0,
-            format: 0,
-            mode: 'normal',
-            style: '',
-            text: 'Read the docs at ',
-            type: 'text',
-            version: 1,
-          },
-          {
-            type: 'link',
-            fields: { linkType: 'custom', newTab: true, url: 'https://payloadcms.com/docs' },
-            format: '',
-            indent: 0,
-            version: 3,
-            children: [
-              {
-                detail: 0,
-                format: 0,
-                mode: 'normal',
-                style: '',
-                text: 'payloadcms.com/docs',
-                type: 'text',
-                version: 1,
-              },
-            ],
-          },
-          { detail: 0, format: 0, mode: 'normal', style: '', text: '.', type: 'text', version: 1 },
-        ],
-      },
-    ],
-    direction: null,
-    format: '',
-    indent: 0,
-    type: 'root',
-    version: 1,
-  },
-}
-
-export default function ExampleScreen() {
-  return (
-    <SafeAreaView style={{ flex: 1 }}>
-      <ScrollView contentContainerStyle={{ padding: 16 }}>
-        <RichText
-          data={sampleLexical}
-          onExternalLinkPress={({ url }) => {
-            void Linking.openURL(url)
-          }}
-        />
-      </ScrollView>
-    </SafeAreaView>
-  )
-}
-```
-
-If you can render this screen and tap the link successfully, your baseline integration is working.
-
-### Primitive Overrides
-
-The React Native renderer can replace the primitives it uses internally. This is useful when your app wraps base components for theming, analytics, navigation, or design system integration.
-
-If a primitive override is omitted, the renderer falls back to its default primitive.
-
-```tsx
-import { Pressable, Text, View } from '@/components/ui'
-import { RichText } from '@payloadcms/richtext-lexical/react-native'
-
-export function ArticleBody({ data }: { data: any }) {
+const MyComponent = () => {
   return (
     <RichText
-      data={data}
-      primitives={{
-        Pressable,
-        Text,
-        View,
-      }}
+      content={/* your rich text content */}
     />
   )
 }
 ```
 
-Supported primitive keys:
+Most importantly, since this is a static build, there is no built-in package resolution, nor is there a way to update the package without rebuilding and copying the files again. **Only use code paths to features you support.** For example, if you only support the React Native export, only import from `exports/react-native` and not from `exports/react` or `exports/client`. If you import from unsupported paths, you may encounter errors due to missing dependencies imported by the build but not installed in your particular project.
 
-- `Text`
-- `View`
-- `Pressable`
-- `Image`
-- `ScrollView`
+This package is compartimentalized, meaning that you can choose to only use the features you need. For example, if you only need the React Native export, you can import from `exports/react-native` and not from `exports/react` or `exports/client`. This allows you to avoid installing unnecessary dependencies and keep your project lightweight.
 
-### Custom Converters
+# Implementation
 
-Like the React renderer, the React Native renderer supports converter overrides.
+> *The following sections provide an overview of the technical rationale behind the implementation, the public API, expected usage flow, edge cases and concerns, and questions for maintainers. This is intended to give maintainers a comprehensive understanding of the implementation decisions and trade-offs made in this renderer.*
 
-```tsx
-import { RichText } from '@payloadcms/richtext-lexical/react-native'
+This implementation adds **React Native rendering support** to the `@payloadcms/richtext-lexical` package by adding a similar entry point `@payloadcms/richtext-lexical/react-native` as the existing renderers (and specifically the React renderer) but with RN primitives.
 
-export function ArticleBody({ data }: { data: any }) {
-  return (
-    <RichText
-      converters={({ defaultConverters, primitives }) => ({
-        ...defaultConverters,
-        heading: ({ node, nodesToReactNative }) => {
-          const TextPrimitive = primitives.Text
+> **Note:** This is my first contribution, so I would really appreciate feedback on both implementation decisions and documentation quality! I used the existing React renderer implementation as the base and inspiration for this RN renderer. If any direction here is not aligned with contribution expectations, I would appreciate pointers on the preferred approach!
 
-          return (
-            <TextPrimitive style={{ fontSize: node.tag === 'h1' ? 36 : 28, fontWeight: '700' }}>
-              {nodesToReactNative({ nodes: node.children })}
-            </TextPrimitive>
-          )
-        },
-      })}
-      data={data}
-    />
-  )
-}
-```
+The RN entrypoint is intended to provide a renderer-only API for serialized Lexical content in RN applications. I tried to keep the exposed API as close as possible to the existing React renderer so we can use it as a drop-in replacement in most cases, while still allowing for platform-specific behavior through converter and primitive overrides.
 
-The `converters` prop accepts either:
+> **Note:** This implementation intentionally focuses on rendering serialized Lexical content in RN. It does not include editor UI components, plugin ports, or image responsiveness behavior. Mostly because I'm not too sure I could do it properly.
 
-- An object of converters
-- A function that receives `defaultConverters` and resolved `primitives`
+## Primitives
 
-### Link Handling
+Unlike the React renderer, I introduced a layer of abstraction for primitives in the RN renderer. Since React can be expected to run in a DOM environment, the React renderer can safely assume that primitives like `div`, `span`, and `img` are available. In contrast, RN has a different set of primitives (`View`, `Text`, `Image`, etc.) that are not globally available in the same way. They need to be "manually" imported from `react-native` and can also be wrapped or customized by applications. And even then, some primitives (like `Text`) have specific behavior and nesting rules embedded in app-specific components.
 
-The default React Native link converter supports external links.
+So, instead of importing RN primitives directly in each converter, I created a `resolvePrimitive` utility that maps abstract primitive names (like `Text`, `View`, `Image`, etc.) to actual RN components. This mapping can be overridden through converter context, allowing for primitive injection for customization (such as _theming, analytics instrumentation, accessibility conventions, or navigation integration without having to rewrite all converters_).
 
-```tsx
-import * as Linking from 'expo-linking'
-import { RichText } from '@payloadcms/richtext-lexical/react-native'
+Primitive resolution is performed once and passed through converter context. In practical terms, centralized primitive resolution improves consistency when users partially override primitives (for example, only replacing `Text` and `Pressable`) instead of having to reimplement the entire converter set. It also keeps converter implementations focused on node-specific logic rather than platform-specific component management.
 
-export function ArticleBody({ data }: { data: any }) {
-  return (
-    <RichText
-      data={data}
-      onExternalLinkPress={({ url }) => {
-        void Linking.openURL(url)
-      }}
-    />
-  )
-}
-```
+## Supported nodes and converters
 
-Current default behavior:
+`TODO: add a list of supported nodes and converters here, and any notable differences in behavior from the React renderer.`
 
-- External links are supported.
-- Internal links are not resolved by default.
-- If `onExternalLinkPress` is not provided, the renderer attempts to open the URL through the React Native runtime when available.
+## Exposed API
 
-### Upload Handling
+To align with the API exposed by the React renderer, I've tried to mimic the same structure. The main entry point is the `RichText` component, which accepts serialized Lexical content and renders it using the RN converters and primitives. For users who need more control, the lower-level conversion functions (`convertLexicalToReactNative` and `convertLexicalNodesToReactNative`) are also exposed for direct use. I also expose primitive utilities and converter types to keep custom integrations type-safe and consistent with package defaults.
 
-The default upload converter supports a single image URL or a file link.
+## Expected usage
 
-Current default behavior:
+The expected integration flow is kept similarly aligned with the React renderer. Data fetching is left to the user, and the package focuses on rendering serialized Lexical content via the `RichText` component. Developers can optionally provide `primitives` and `converters` overrides for customization, but the default set should cover most use cases. They can also define an `onExternalLinkPress` handler to manage external URL behavior explicitly, which is important in RN where URL handling can vary by environment. By default, external links will attempt to open using `Linking.openURL`, but providing an explicit handler allows for more control and consistency across platforms. **So, to recap:**
 
-- Images render through the resolved `Image` primitive.
-- Non-image uploads render as a pressable file link.
-- Responsive web-only picture behavior is intentionally not implemented in the React Native renderer.
+1. Users fetch serialized Lexical data from Payload.
+2. Render it with `RichText` from `@payloadcms/richtext-lexical/react-native`.
+3. Provide `onExternalLinkPress` for explicit external URL behavior.
+4. Add `primitives` overrides when integrating with an app design system.
+5. Add `converters` overrides when default node behavior is insufficient.
 
-## Technical Implementation
+## Edge cases, risks, and concerns
 
-The React Native renderer follows the same general architecture as the existing React renderer.
+### Unknown or custom node types
 
-### Why This Architecture
+If stored content includes node types with no registered converter, the output may be missing for those nodes. Currently, the default behavior is to render nothing for unsupported nodes, which could lead to silent content loss if not carefully managed. I haven't had time to look into the other implementation yet for how other implementations handle this, but I would be open to implementing a stricter default behavior (for example, rendering a placeholder or warning in development) if you think that would be more appropriate.
 
-The renderer is converter-driven by design.
+### Internal links
 
-- Lexical JSON is a tree of node types, so mapping node type -> converter keeps behavior explicit.
-- Converters are pure rendering units, which makes customization local and predictable.
-- Primitive injection avoids hard-coding React Native imports in every converter, enabling design-system compatibility.
-- Sharing the conceptual model with the React renderer reduces maintenance overhead and cognitive load when moving between platforms.
+Internal links are not resolved by default in the RN renderer. I've left it for the developers to override the default `Link` converter and implement app-specific navigation logic, as internal link resolution is highly dependent on app routing structure and navigation libraries. In the React renderer, the exposed Link converter allows to provide a `internalDocToHref` prop for internal link resolution for simplicity. I'm not sure whether to implement this or not. The only reason I can see to implement it is to keep feature parity between renderers. I've elected not to implement it for now, due to lack of time.
 
-This approach favors extension points over hidden behavior: if a node needs different rendering, you override its converter.
+### Large document trees and render performance
 
-### Public API
+Obviously enough, the recursive conversion of large trees increases render cost and affects scroll performance on low-end devices. This is a general concern for rich text rendering in any environment, but especially in RN where JS thread performance is usually(?) more constrained. I will try to add profiling tests and metrics to identify specific bottlenecks and optimize converter implementations where possible, but I'm not confident enough, nor am I sure if this falls within the scope of this feature request itself. Would be happy to hear feedback on this.
 
-The public entrypoint is exported from `@payloadcms/richtext-lexical/react-native` and includes:
+### Tables
 
-- `RichText`
-- `convertLexicalToReactNative`
-- `convertLexicalNodesToReactNative`
-- `defaultReactNativeConverters`
-- Primitive utilities and converter types
+Tables in the renderer are currently implemented with basic `View` and `Text` primitives, which may not support all desired table features (like fixed headers, responsive layouts, or complex cell spanning). Cards on the table (no pun intended), it's a barebones implementation that covers basic rendering but may not meet all use cases. That's done intentionally. I hoped to get feedback on whether this is sufficient for the initial implementation or if someone could help with a better approach.
 
-Expected use of each export:
+### Images
 
-- `RichText`: primary API for app usage. Prefer this unless you need custom orchestration.
-- `convertLexicalToReactNative`: converts a full serialized editor state to React Native nodes.
-- `convertLexicalNodesToReactNative`: lower-level helper for converting a specific node array.
-- `defaultReactNativeConverters`: base converter map for extension/override patterns.
-- Primitive utilities and converter types: typing + primitive resolution helpers for custom integrations.
+Web-specific responsive image behavior is intentionally not replicated in RN. The React renderer benefits from browser-native features like CSS media queries and automatic image scaling through srcset attributes. React Native has no equivalent mechanism. Image sizing must be explicitly specified or calculated at runtime. Additionally, Payload's upload metadata (dimensions, orientation, file size) should be leveraged by application code to implement appropriate RN-specific behaviors (such as preloading, caching strategies, or adaptive quality selection based on network conditions). Document this gap clearly so developers don't expect parity with web renderers.
 
-### Conversion Pipeline
+### URL Handling Defaults
 
-The renderer converts serialized Lexical nodes through a converter map.
-
-1. `RichText` resolves primitive overrides and converter overrides.
-2. `convertLexicalToReactNative` starts at the editor state root.
-3. `convertLexicalNodesToReactNative` walks child nodes recursively.
-4. Each node is matched to a converter by node type.
-5. Converters return React elements built from resolved primitives.
-
-This structure keeps the renderer extensible while preserving predictable defaults.
-
-In practice, this means there is a single place where behavior is chosen for each node type, which simplifies debugging and makes output differences easier to reason about.
-
-### Expected Usage Flow
-
-For most applications, the intended flow is:
-
-1. Fetch document data from Payload.
-2. Pass the serialized Lexical JSON to `RichText`.
-3. Provide `onExternalLinkPress` to control URL opening behavior.
-4. Optionally provide primitive overrides for app-wide UI consistency.
-5. Add converter overrides only for node-specific presentation or behavior.
-
-Suggested progression:
-
-- Start with defaults.
-- Add primitives when integrating with a design system.
-- Add converter overrides only where default behavior is insufficient.
-
-### Primitive Resolution
-
-Primitive replacement is handled centrally before rendering begins.
-
-- `resolveReactNativePrimitives` merges user overrides with package defaults.
-- Every default converter reads primitives from converter context instead of importing primitives directly.
-- This ensures partial overrides work consistently across the full tree.
-
-### Default Converter Coverage
-
-The default React Native renderer currently includes converters for:
-
-- Paragraphs
-- Text formatting
-- Headings
-- Links
-- Lists
-- Line breaks
-- Tabs
-- Blockquotes
-- Horizontal rules
-- Tables
-- Uploads
-
-### Styling Model
-
-The renderer uses lightweight inline React Native styles in default converters.
-
-- Container styling is controlled through `containerStyle`.
-- Primitive substitution is the preferred integration point for app-level theming.
-- Converter overrides are the preferred integration point for node-specific presentation changes.
-
-### Scope
-
-The React Native entrypoint is intentionally limited to rendering.
-
-- No editor UI
-- No Lexical editor plugins
-- No internal link resolution by default
-- No responsive image source-set behavior
-
-If your app needs deeper behavior, the intended extension points are primitive overrides and custom converters.
-
-### Edge Cases, Issues, and Concerns
-
-Potential issues to account for in production integrations:
-
-- Unknown or custom node types: if your data includes nodes without converters, they may render as empty output unless you register an override.
-- Internal links: internal Payload links are not resolved by default, so app-level route mapping is required for navigation-aware behavior.
-- Deeply nested content: very large or deeply nested documents can increase render cost because conversion is recursive.
-- Table rendering on small screens: table content can overflow; consider wrapping with `ScrollView` or custom table converters for mobile UX.
-- Upload handling differences from web: responsive `<picture>` behavior is intentionally absent in React Native; only direct image/file rendering is provided.
-- Runtime URL behavior: if `onExternalLinkPress` is omitted, opening links depends on React Native runtime availability and platform handling.
-
-Operational concern:
-
-- Keep serialized Lexical schema and converter support aligned during upgrades. If new node shapes are introduced in content but converter logic is not updated, rendering gaps can appear.
+When `onExternalLinkPress` is omitted, runtime-level URL handling may vary by environment. Recommend always providing an explicit handler in production applications. React Native's `Linking.openURL` behavior differs across iOS and Android, and behavior is undefined in non-native environments (web, SSR contexts, testing). Defaulting to `Linking.openURL` without an explicit handler can lead to silent failures or platform-specific bugs. By requiring developers to provide an `onExternalLinkPress` handler, the package shifts responsibility to the consumer while maintaining safety and predictability.
