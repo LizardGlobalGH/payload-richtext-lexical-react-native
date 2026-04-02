@@ -123,7 +123,7 @@ export function convertLexicalNodesToReactNative({
       } else {
         const TextPrimitive = context.primitives.Text
 
-        reactNode = <TextPrimitive key={i}>unknown node</TextPrimitive>
+        reactNode = <TextPrimitive key={i} style={{ backgroundColor: 'red' }}>unknown node</TextPrimitive>
       }
 
       const style: {

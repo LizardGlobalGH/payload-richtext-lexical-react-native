@@ -25,11 +25,14 @@ export const ListReactNativeConverter: ReactNativeConverters<
 
     return <ViewPrimitive>{children}</ViewPrimitive>
   },
-  listitem: ({ context, node, nodesToReactNative, parent }) => {
+  listitem: ({ context, node, nodesToReactNative, parent, converters }) => {
     const hasSubLists = node.children.some((child) => child.type === 'list')
 
     const children = nodesToReactNative({
       nodes: node.children,
+      context,
+      converters,
+      parent,
     })
 
     const TextPrimitive = context.primitives.Text
@@ -51,7 +54,7 @@ export const ListReactNativeConverter: ReactNativeConverters<
     return (
       <ViewPrimitive style={{ alignItems: 'flex-start', flexDirection: 'row', gap: 8 }}>
         <TextPrimitive>{marker}</TextPrimitive>
-        <ViewPrimitive style={{ flexShrink: 1 }}>{children}</ViewPrimitive>
+        <TextPrimitive>{children}</TextPrimitive>
       </ViewPrimitive>
     )
   },
