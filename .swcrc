@@ -17,16 +17,16 @@
         "useBuiltins": true
       }
     },
-    "experimental": {
-      "plugins": [
-        [
-          "swc-plugin-transform-remove-imports",
-          {
-            "test": "\\.(scss)$"
-          }
-        ]
-      ]
-    }
+    // "experimental": {
+    //   "plugins": [
+    //     [
+    //       "swc-plugin-transform-remove-imports",
+    //       {
+    //         "test": "\\.(scss)$"
+    //       }
+    //     ]
+    //   ]
+    // }
   },
   "module": {
     "type": "es6"
