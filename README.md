@@ -20,16 +20,22 @@ import { Text } from "@/components/reusable/text";
 
 ## Internally
 
-First, build the package:
+Use the built-in CLI to build and copy `dist` into your local module path:
 
 ```bash
-npm run build
+pnpm internal:install --target YOUR_PROJECT/modules/richtext-lexical
 ```
 
-Then, copy the built files from the `dist` directory to your project's `modules` directory (or wherever you manage internal packages). For example:
+This command performs the equivalent of:
 
 ```bash
-cp -r dist/* YOUR_PROJECT/modules/richtext-lexical
+pnpm build && rm -rf YOUR_PROJECT/modules/richtext-lexical/* && cp -R dist/* YOUR_PROJECT/modules/richtext-lexical/
+```
+
+If you have already built and only want to re-copy files, use:
+
+```bash
+pnpm internal:install --target YOUR_PROJECT/modules/richtext-lexical --skip-build
 ```
 
 Finally, you can import the package in your project as follows:
