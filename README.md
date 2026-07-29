@@ -2,25 +2,28 @@
 
 This package provides a React Native implementation of the Rich Text Renderer for serialized Lexical Editor content forked from `@lizardglobal/payload-richtext-lexical-react-native`. It includes components and utilities for rendering and managing rich text content in a React Native application.
 
-# Integration
+# Installation and Usage
 
-There are two ways to integrate this package into your project: either by installing it as a dependency or by integrating it internally without publishing. Until the package is published, you can use the following steps to integrate it internally.
+## Installation
 
-## Externally (coming soon)
+Install the package using your preferred package manager:
 
-The integration is planned to be open-sourced at `payload-richtext-lexical` and/or `@lizardglobal/payload-richtext-lexical` once stable. To use, import the `RichText` component from the package and pass the serialized Lexical content as a prop:
+```bash
+# npm
+npm install @lizardglobal/payload-richtext-lexical
 
-```tsx
-import { RichText } from "@lizardglobal/payload-richtext-lexical/react-native";
-import { Text } from "@/components/reusable/text";
+# yarn
+yarn add @lizardglobal/payload-richtext-lexical
 
-<RichText data={serializedLexicalContent} primitives={{ Text }} />
+# pnpm
+pnpm add @lizardglobal/payload-richtext-lexical
 ```
 
+### Internal Installation (Deprecated)
 
-## Internally
+> **⚠️ Deprecation Warning:** Internal installation support will be removed in a future release. Please migrate to installing the package via npm, yarn, or pnpm as shown above.
 
-Use the built-in CLI to build and copy `dist` into your local module path:
+If you need to integrate this package internally without publishing, you can use the built-in CLI to build and copy `dist` into your local module path:
 
 ```bash
 pnpm internal:install --target YOUR_PROJECT/modules/richtext-lexical
@@ -38,7 +41,8 @@ If you have already built and only want to re-copy files, use:
 pnpm internal:install --target YOUR_PROJECT/modules/richtext-lexical --skip-build
 ```
 
-Finally, you can import the package in your project as follows:
+Then import the package in your project as follows:
+
 ```tsx
 import { RichText } from '@/modules/richtext-lexical/exports/react-native'
 
@@ -51,9 +55,167 @@ const MyComponent = () => {
 }
 ```
 
-Most importantly, since this is a static build, there is no built-in package resolution, nor is there a way to update the package without rebuilding and copying the files again. **Only use code paths to features you support.** For example, if you only support the React Native export, only import from `exports/react-native` and not from `exports/react` or `exports/client`. If you import from unsupported paths, you may encounter errors due to missing dependencies imported by the build but not installed in your particular project.
+**Important:** Since this is a static build, there is no built-in package resolution. **Only use code paths to features you support.** For example, if you only support the React Native export, only import from `exports/react-native` and not from `exports/react` or `exports/client`. Importing from unsupported paths may cause errors due to missing dependencies.
 
-This package is compartimentalized, meaning that you can choose to only use the features you need. For example, if you only need the React Native export, you can import from `exports/react-native` and not from `exports/react` or `exports/client`. This allows you to avoid installing unnecessary dependencies and keep your project lightweight.
+## Basic Usage
+
+The simplest way to render Lexical content is to use the `RichText` component with your serialized data:
+
+```tsx
+import { RichText } from "@lizardglobal/payload-richtext-lexical/react-native";
+
+function ArticleContent({ article }) {
+  return <RichText data={article.content} />;
+}
+```
+
+This will render the content using default React Native primitives (`View`, `Text`, `Image`, etc.) and built-in converters for all supported Lexical node types.
+
+## Handling External Links
+
+Since React Native doesn't have automatic link handling like web browsers, you should provide an `onExternalLinkPress` handler to control how external URLs are opened:
+
+```tsx
+import { RichText } from "@lizardglobal/payload-richtext-lexical/react-native";
+import { Linking, Alert } from "react-native";
+
+function ArticleContent({ article }) {
+  const handleExternalLink = async (url: string) => {
+    const supported = await Linking.canOpenURL(url);
+    if (supported) {
+      await Linking.openURL(url);
+    } else {
+      Alert.alert("Error", `Cannot open URL: ${url}`);
+    }
+  };
+
+  return (
+    <RichText 
+      data={article.content} 
+      onExternalLinkPress={handleExternalLink}
+    />
+  );
+}
+```
+
+## Customizing Primitives
+
+Primitives are the basic building blocks used to render content (e.g., `Text`, `View`, `Image`, `Pressable`). You can override these to integrate with your app's design system or add custom behavior:
+
+```tsx
+import { RichText } from "@lizardglobal/payload-richtext-lexical/react-native";
+import { Text as CustomText } from "@/components/ui/Text";
+import { View as CustomView } from "@/components/ui/View";
+import { Pressable as CustomPressable } from "@/components/ui/Pressable";
+
+function ArticleContent({ article }) {
+  return (
+    <RichText 
+      data={article.content}
+      primitives={{
+        Text: CustomText,      // Use your themed Text component
+        View: CustomView,      // Use your themed View component
+        Pressable: CustomPressable, // Use your themed Pressable component
+      }}
+    />
+  );
+}
+```
+
+**Why customize primitives?**
+- Apply consistent theming across your app
+- Add analytics tracking to interactive elements
+- Implement custom accessibility patterns
+- Integrate with your existing component library
+
+**Available primitives:**
+- `Text` - Text rendering
+- `View` - Container/layout elements
+- `Image` - Image rendering
+- `Pressable` - Interactive elements (links, buttons)
+
+You only need to override the primitives you want to customize. Any primitives not specified will use the default React Native components.
+
+## Customizing Converters
+
+Converters transform Lexical node types into React Native components. You can override default converters to change how specific content types are rendered:
+
+```tsx
+import { RichText } from "@lizardglobal/payload-richtext-lexical/react-native";
+import { View, Text } from "react-native";
+import { useNavigation } from "@react-navigation/native";
+
+function ArticleContent({ article }) {
+  const navigation = useNavigation();
+
+  // Custom converter for heading nodes
+  const customHeadingConverter = {
+    converter: ({ node, children, primitives }) => {
+      const HeadingText = primitives.Text;
+      const fontSize = node.tag === 'h1' ? 32 : node.tag === 'h2' ? 24 : 18;
+      
+      return (
+        <HeadingText 
+          key={node.key}
+          style={{ 
+            fontSize, 
+            fontWeight: 'bold', 
+            marginVertical: 12,
+            color: '#1a1a1a'
+          }}
+        >
+          {children}
+        </HeadingText>
+      );
+    },
+  };
+
+  // Custom converter for link nodes with internal navigation
+  const customLinkConverter = {
+    converter: ({ node, children, primitives }) => {
+      const LinkPressable = primitives.Pressable;
+      const LinkText = primitives.Text;
+      
+      const handlePress = () => {
+        if (node.fields?.doc?.relationTo === 'articles') {
+          // Navigate internally for article links
+          navigation.navigate('Article', { id: node.fields.doc.value.id });
+        } else if (node.fields?.url) {
+          // Handle external links
+          Linking.openURL(node.fields.url);
+        }
+      };
+
+      return (
+        <LinkPressable key={node.key} onPress={handlePress}>
+          <LinkText style={{ color: '#007AFF', textDecorationLine: 'underline' }}>
+            {children}
+          </LinkText>
+        </LinkPressable>
+      );
+    },
+  };
+
+  return (
+    <RichText 
+      data={article.content}
+      converters={{
+        heading: customHeadingConverter,
+        link: customLinkConverter,
+      }}
+    />
+  );
+}
+```
+
+**Common converter customization use cases:**
+- **Internal navigation:** Handle relationship links with app routing
+- **Styling:** Apply custom styles beyond what primitives provide
+- **Analytics:** Track when specific content types are rendered or interacted with
+- **Accessibility:** Add custom accessibility labels or behaviors
+- **Content transformation:** Modify or enhance content before rendering
+
+**Note:** When you override a converter, you're responsible for the complete rendering logic for that node type. Make sure to handle all relevant node properties and edge cases.
 
 # Implementation
 
