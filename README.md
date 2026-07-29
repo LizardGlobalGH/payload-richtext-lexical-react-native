@@ -218,7 +218,7 @@ function ArticleContent({ article }) {
 }
 ```
 
-> [!INFO]
+> [!NOTE]
 > When you override a converter, you're responsible for the complete rendering logic for that node type. Make sure to handle all relevant node properties and edge cases.
 
 # Implementation
