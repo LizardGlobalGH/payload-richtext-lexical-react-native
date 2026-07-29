@@ -23,6 +23,12 @@
     "src/exports/server/ast/mdx.ts",
     "src/exports/shared.ts"
   ],
+  "clean": {
+    "match": [
+      "\\.(ts|tsx|mts|cts)$",
+      "\\.(js|jsx|mjs|cjs)$"
+    ]
+  },
   "partial": {
     "package.json": {
       "keys": {

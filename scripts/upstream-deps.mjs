@@ -42,7 +42,9 @@
  * "include" (optional): when set, sync/compare only these files/folders.
  * "exclude": always skipped during sync. "partial" wins over exclude for the same path.
  * "keep": files/folders never removed by --clean (even if outside the dependency graph).
- * CLI --include / --exclude / --keep fully override the corresponding config lists when provided.
+ * "clean": { "match": string[] } — regexes; when set, --clean only removes paths that match
+ *   at least one pattern (e.g. only .ts/.js). Non-matching files like .css/.scss are kept.
+ * CLI --include / --exclude / --keep / --clean-match fully override the corresponding config lists when provided.
  * For each partial file, use either keys (JSON) or lines (text), and either
  * include or exclude mode (not both). Nested JSON keys use dot paths; keys that
  * contain dots must use brackets, e.g. exports["./react-native"], or an array
@@ -524,6 +526,25 @@ function createPathMatcher(patterns) {
   return { patterns: unique, matches }
 }
 
+/**
+ * Compile clean.match regex strings. Invalid patterns throw.
+ * @returns {RegExp[]}
+ */
+function compileCleanMatchRegexes(patterns) {
+  return (patterns ?? []).map((pattern, index) => {
+    try {
+      return new RegExp(pattern)
+    } catch (error) {
+      throw new Error(`Invalid clean.match regex at index ${index} (${pattern}): ${error.message}`)
+    }
+  })
+}
+
+function pathMatchesCleanRegexes(relPath, regexes) {
+  if (!regexes || regexes.length === 0) return true
+  return regexes.some((regex) => regex.test(relPath))
+}
+
 function filterTreeByInclude(tree, isIncluded) {
   /** @type {Map<string, string>} */
   const filtered = new Map()
@@ -879,6 +900,7 @@ async function applyPartialMerge(rel, sourceAbs, destAbs, rule) {
  *   - include: string[] — when set, only these files/folders are synced/compared
  *   - exclude: string[] — files/folders skipped during sync/compare
  *   - keep: string[] — files/folders never removed by --clean
+ *   - clean: { match?: string[] } — regexes limiting which files --clean may remove
  *   - partial: { [relativePath]: { keys|lines: { include|exclude: ... } } }
  */
 async function loadConfigFile(configPath) {
@@ -900,7 +922,7 @@ async function loadConfigFile(configPath) {
     throw new Error(`Config file must contain a JSON object with keys: ${configPath}`)
   }
 
-  const knownKeys = new Set(['include', 'exclude', 'keep', 'partial'])
+  const knownKeys = new Set(['include', 'exclude', 'keep', 'clean', 'partial'])
   for (const key of Object.keys(parsed)) {
     if (!knownKeys.has(key)) {
       log.warn(`Unknown config key "${key}" in ${configPath} (ignored)`)
@@ -922,6 +944,21 @@ async function loadConfigFile(configPath) {
     throw new Error(`Config key "keep" must be an array of strings: ${configPath}`)
   }
 
+  const cleanRaw = parsed.clean ?? {}
+  if (cleanRaw === null || typeof cleanRaw !== 'object' || Array.isArray(cleanRaw)) {
+    throw new Error(`Config key "clean" must be an object: ${configPath}`)
+  }
+  const knownCleanKeys = new Set(['match'])
+  for (const key of Object.keys(cleanRaw)) {
+    if (!knownCleanKeys.has(key)) {
+      log.warn(`Unknown clean config key "${key}" in ${configPath} (ignored)`)
+    }
+  }
+  const cleanMatch = cleanRaw.match ?? []
+  if (!Array.isArray(cleanMatch) || cleanMatch.some((item) => typeof item !== 'string')) {
+    throw new Error(`Config key "clean.match" must be an array of strings: ${configPath}`)
+  }
+
   /** @type {Map<string, ReturnType<typeof parsePartialRule>>} */
   const partial = new Map()
   const partialRaw = parsed.partial ?? {}
@@ -938,7 +975,7 @@ async function loadConfigFile(configPath) {
   log.info(`Loaded config from ${abs}`)
   log.debug(`Config keys: ${Object.keys(parsed).join(', ') || '(none)'}`)
 
-  return { include, exclude, keep, partial }
+  return { include, exclude, keep, cleanMatch, partial }
 }
 
 /**
@@ -949,6 +986,7 @@ async function resolveSyncConfig({
   includeFromCli = [],
   excludeFromCli = [],
   keepFromCli = [],
+  cleanMatchFromCli = [],
   configPath,
 }) {
   /** @type {string[]} */
@@ -957,6 +995,8 @@ async function resolveSyncConfig({
   const excludeFromConfig = []
   /** @type {string[]} */
   const keepFromConfig = []
+  /** @type {string[]} */
+  const cleanMatchFromConfig = []
   /** @type {Map<string, ReturnType<typeof parsePartialRule>>} */
   let partial = new Map()
 
@@ -965,12 +1005,15 @@ async function resolveSyncConfig({
     includeFromConfig.push(...config.include)
     excludeFromConfig.push(...config.exclude)
     keepFromConfig.push(...config.keep)
+    cleanMatchFromConfig.push(...config.cleanMatch)
     partial = config.partial
   }
 
   const includePatterns = includeFromCli.length > 0 ? includeFromCli : includeFromConfig
   const excludePatterns = excludeFromCli.length > 0 ? excludeFromCli : excludeFromConfig
   const keepPatterns = keepFromCli.length > 0 ? keepFromCli : keepFromConfig
+  const cleanMatchPatterns =
+    cleanMatchFromCli.length > 0 ? cleanMatchFromCli : cleanMatchFromConfig
 
   if (includeFromCli.length > 0 && includeFromConfig.length > 0) {
     log.info('CLI --include overrides config "include"')
@@ -980,6 +1023,9 @@ async function resolveSyncConfig({
   }
   if (keepFromCli.length > 0 && keepFromConfig.length > 0) {
     log.info('CLI --keep overrides config "keep"')
+  }
+  if (cleanMatchFromCli.length > 0 && cleanMatchFromConfig.length > 0) {
+    log.info('CLI --clean-match overrides config "clean.match"')
   }
 
   // Partial rules take precedence over full exclude for the same path
@@ -1036,6 +1082,16 @@ async function resolveSyncConfig({
     log.debug('No clean keep patterns configured')
   }
 
+  const cleanMatchRegexes = compileCleanMatchRegexes(cleanMatchPatterns)
+  if (cleanMatchRegexes.length > 0) {
+    log.info(`Clean match regexes (${cleanMatchRegexes.length}) — only matching files may be removed:`)
+    for (const pattern of cleanMatchPatterns) {
+      log.info(`  ~ /${pattern}/`)
+    }
+  } else {
+    log.debug('No clean.match regexes configured (any non-kept file may be removed)')
+  }
+
   if (partial.size > 0) {
     log.info(`Partial update rules (${partial.size}):`)
     for (const [rel, rule] of [...partial.entries()].sort(([a], [b]) => a.localeCompare(b))) {
@@ -1060,6 +1116,7 @@ async function resolveSyncConfig({
     matchesInclude: (relPath) => includeMatcher.matches(relPath),
     includePatterns: includeMatcher.patterns,
     keepPatterns: keepMatcher.patterns,
+    cleanMatchRegexes,
     isExcluded,
     getPartialRule: (relPath) => {
       const rel = toPosix(relPath).replace(/^\.\//, '')
@@ -1500,7 +1557,7 @@ async function runScan(upstreamPath, allFiles) {
  * what it needs to build. Empty directories are removed afterward
  * (the clean root itself is kept).
  */
-async function runClean(cleanRootArg, { allFiles, includePatterns, keepPatterns }) {
+async function runClean(cleanRootArg, { allFiles, includePatterns, keepPatterns, cleanMatchRegexes }) {
   const cleanRoot = isAbsolute(cleanRootArg)
     ? cleanRootArg
     : resolve(PROJECT_ROOT, cleanRootArg)
@@ -1570,8 +1627,18 @@ async function runClean(cleanRootArg, { allFiles, includePatterns, keepPatterns 
 
   const keepIncludeMatcher = createPathMatcher(keepIncludePatterns)
   const cleanKeepMatcher = createPathMatcher(keepFolderPatterns)
-  const shouldKeep = (rel) =>
-    graphKeep.has(rel) || keepIncludeMatcher.matches(rel) || cleanKeepMatcher.matches(rel)
+  const matchRegexes = cleanMatchRegexes ?? []
+
+  const shouldKeep = (rel) => {
+    if (graphKeep.has(rel) || keepIncludeMatcher.matches(rel) || cleanKeepMatcher.matches(rel)) {
+      return true
+    }
+    // When clean.match is set, non-matching files (e.g. .css/.scss) are never removed
+    if (matchRegexes.length > 0 && !pathMatchesCleanRegexes(rel, matchRegexes)) {
+      return true
+    }
+    return false
+  }
 
   const files = await collectFiles(cleanRoot)
   const toRemove = []
@@ -1677,8 +1744,14 @@ program
     [],
   )
   .option(
+    '--clean-match <regex>',
+    'regex; --clean only removes paths matching at least one (repeatable; overrides config "clean.match")',
+    collectOption,
+    [],
+  )
+  .option(
     '-c, --config <path>',
-    'JSON config file path (object with keys; supports "include", "exclude", "keep", and "partial")',
+    'JSON config file path (object with keys; supports "include", "exclude", "keep", "clean", and "partial")',
   )
   .option(
     '--clean [path]',
@@ -1700,11 +1773,12 @@ program
     log.info(`Project root: ${PROJECT_ROOT}`)
     log.debug(`Entry paths: ${paths.join(', ')}`)
 
-    const { isIncluded, isExcluded, getPartialRule, includePatterns, keepPatterns } =
+    const { isIncluded, isExcluded, getPartialRule, includePatterns, keepPatterns, cleanMatchRegexes } =
       await resolveSyncConfig({
         includeFromCli: options.include ?? [],
         excludeFromCli: options.exclude ?? [],
         keepFromCli: options.keep ?? [],
+        cleanMatchFromCli: options.cleanMatch ?? [],
         configPath: options.config,
       })
 
@@ -1753,6 +1827,7 @@ program
         allFiles,
         includePatterns,
         keepPatterns,
+        cleanMatchRegexes,
       })
     }
   })
