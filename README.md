@@ -227,7 +227,8 @@ This implementation adds **React Native rendering support** to the `@lizardgloba
 
 The RN entrypoint is intended to provide a renderer-only API for serialized Lexical content in RN applications. I tried to keep the exposed API as close as possible to the existing React renderer so we can use it as a drop-in replacement in most cases, while still allowing for platform-specific behavior through converter and primitive overrides.
 
-> **Note:** This implementation intentionally focuses on rendering serialized Lexical content in RN. It does not include editor UI components, plugin ports, or image responsiveness behavior.
+> [!NOTE]
+> This implementation intentionally focuses on rendering serialized Lexical content in RN. It does not include editor UI components, plugin ports, or image responsiveness behavior.
 
 ## Primitives
 
