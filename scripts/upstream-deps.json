@@ -1,13 +1,13 @@
 {
   "include": [
     "src",
-    "package.json",
-    "tsconfig.json"
-  ],
-  "exclude": [
+    "package.json"
+],
+"exclude": [
     ".swcrc",
     "eslint.config.js",
-    "README.md"
+    "README.md",
+    "tsconfig.json"
   ],
   "partial": {
     "package.json": {
@@ -31,11 +31,6 @@
           "dependencies.@payloadcms/ui",
           "devDependencies.commander"
         ]
-      }
-    },
-    "tsconfig.json": {
-      "keys": {
-        "exclude": ["compilerOptions.paths"]
       }
     }
   }

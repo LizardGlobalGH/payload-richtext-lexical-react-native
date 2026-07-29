@@ -10,6 +10,13 @@
  *   node scripts/upstream-deps.mjs <files-or-folders...> --compare <upstream>
  *   node scripts/upstream-deps.mjs <files-or-folders...> --scan <upstream>
  *   node scripts/upstream-deps.mjs <files-or-folders...> --graph
+ *   node scripts/upstream-deps.mjs <files-or-folders...> --clean
+ *   node scripts/upstream-deps.mjs <files-or-folders...> --clean src
+ *
+ * --clean removes files under the given folder (default: src) that are not in
+ * the dependency graph and not matched by include (include patterns that cover
+ * the clean root itself are ignored so cleaning src with include:["src"] still
+ * prunes unused files).
  *   node scripts/upstream-deps.mjs <files-or-folders...> --sync <upstream> --include src --exclude src/foo --config ./scripts/upstream-deps.json
  *
  * Config file (JSON object):
@@ -1021,6 +1028,8 @@ async function resolveSyncConfig({ includeFromCli = [], excludeFromCli = [], con
 
   return {
     isIncluded,
+    matchesInclude: (relPath) => includeMatcher.matches(relPath),
+    includePatterns: includeMatcher.patterns,
     isExcluded,
     getPartialRule: (relPath) => {
       const rel = toPosix(relPath).replace(/^\.\//, '')
@@ -1450,6 +1459,127 @@ async function runScan(upstreamPath, allFiles) {
 }
 
 // ---------------------------------------------------------------------------
+// Clean (remove files outside dependency graph ∪ include list)
+// ---------------------------------------------------------------------------
+
+/**
+ * Remove files under `cleanRoot` that are neither in the dependency graph
+ * nor matched by the include list. Empty directories are removed afterward
+ * (the clean root itself is kept).
+ *
+ * Include patterns that equal or contain the clean root are ignored for keep
+ * decisions (otherwise `--clean src` with `include: ["src"]` would keep everything).
+ */
+async function runClean(cleanRootArg, { allFiles, includePatterns }) {
+  const cleanRoot = isAbsolute(cleanRootArg)
+    ? cleanRootArg
+    : resolve(PROJECT_ROOT, cleanRootArg)
+  const cleanRel = toPosix(relative(PROJECT_ROOT, cleanRoot))
+
+  if (cleanRel.startsWith('..') || isAbsolute(cleanRel)) {
+    throw new Error(`Clean path must be inside the project: ${cleanRootArg}`)
+  }
+
+  if (!(await fileExists(cleanRoot))) {
+    throw new Error(`Clean path does not exist: ${cleanRoot}`)
+  }
+
+  const cleanStat = await stat(cleanRoot)
+  if (!cleanStat.isDirectory()) {
+    throw new Error(`Clean path must be a directory: ${cleanRoot}`)
+  }
+
+  const graphKeep = new Set(
+    allFiles.map((abs) => toPosix(relative(PROJECT_ROOT, abs))).filter(Boolean),
+  )
+
+  const cleanKey = cleanRel || '.'
+  const keepIncludePatterns = (includePatterns ?? []).filter((pattern) => {
+    // Ignore patterns that cover the entire clean root
+    if (pattern === cleanKey) return false
+    if (cleanKey !== '.' && cleanKey.startsWith(`${pattern}/`)) return false
+    return true
+  })
+
+  const ignoredIncludePatterns = (includePatterns ?? []).filter(
+    (pattern) => !keepIncludePatterns.includes(pattern),
+  )
+  if (ignoredIncludePatterns.length > 0) {
+    log.warn(
+      `Ignoring include pattern(s) for clean keep-set because they cover the clean root: ${ignoredIncludePatterns.join(', ')}`,
+    )
+  }
+
+  const keepIncludeMatcher = createPathMatcher(keepIncludePatterns)
+  const shouldKeep = (rel) => graphKeep.has(rel) || keepIncludeMatcher.matches(rel)
+
+  const files = await collectFiles(cleanRoot)
+  const toRemove = []
+  const kept = []
+
+  for (const abs of files) {
+    const rel = toPosix(relative(PROJECT_ROOT, abs))
+    if (shouldKeep(rel)) {
+      kept.push(rel)
+    } else {
+      toRemove.push(rel)
+    }
+  }
+
+  toRemove.sort()
+  kept.sort()
+
+  log.info(`Clean root: ${cleanKey}`)
+  log.info(`  kept:    ${kept.length}`)
+  log.info(`  remove:  ${toRemove.length}`)
+
+  for (const rel of toRemove) {
+    log.info(`  - ${rel}`)
+  }
+  for (const rel of kept) {
+    log.debug(`  keep ${rel}`)
+  }
+
+  for (const rel of toRemove) {
+    await rm(join(PROJECT_ROOT, rel), { force: true })
+    log.debug(`Removed ${rel}`)
+  }
+
+  // Remove empty directories deepest-first; never remove the clean root itself
+  async function removeEmptyDirs(dir) {
+    let entries
+    try {
+      entries = await readdir(dir, { withFileTypes: true })
+    } catch {
+      return
+    }
+
+    for (const entry of entries) {
+      if (!entry.isDirectory() || isDotDirName(entry.name)) continue
+      if (ALWAYS_SKIP_DIR_NAMES.has(entry.name)) continue
+      await removeEmptyDirs(join(dir, entry.name))
+    }
+
+    if (dir === cleanRoot) return
+
+    try {
+      const remaining = await readdir(dir)
+      if (remaining.length === 0) {
+        await rm(dir, { recursive: true, force: true })
+        log.debug(`Removed empty directory ${toPosix(relative(PROJECT_ROOT, dir))}`)
+      }
+    } catch {
+      // gone
+    }
+  }
+
+  await removeEmptyDirs(cleanRoot)
+
+  log.success(`Clean complete (${toRemove.length} removed, ${kept.length} kept under ${cleanKey})`)
+  return { removed: toRemove, kept }
+}
+
+// ---------------------------------------------------------------------------
 // CLI
 // ---------------------------------------------------------------------------
 
@@ -1484,6 +1614,10 @@ program
     '-c, --config <path>',
     'JSON config file path (object with keys; supports "include", "exclude", and "partial")',
   )
+  .option(
+    '--clean [path]',
+    'remove files/folders under path that are not in the dependency graph or include list (default: src)',
+  )
   .option('--debug', 'enable debug logging', false)
   .action(async (paths, options) => {
     log = createLogger(Boolean(options.debug))
@@ -1493,14 +1627,19 @@ program
       throw new Error('Use only one of --sync, --compare, or --scan')
     }
 
+    const cleanRequested = options.clean !== undefined
+    const cleanPath =
+      typeof options.clean === 'string' && options.clean.length > 0 ? options.clean : 'src'
+
     log.info(`Project root: ${PROJECT_ROOT}`)
     log.debug(`Entry paths: ${paths.join(', ')}`)
 
-    const { isIncluded, isExcluded, getPartialRule } = await resolveSyncConfig({
-      includeFromCli: options.include ?? [],
-      excludeFromCli: options.exclude ?? [],
-      configPath: options.config,
-    })
+    const { isIncluded, isExcluded, getPartialRule, includePatterns } =
+      await resolveSyncConfig({
+        includeFromCli: options.include ?? [],
+        excludeFromCli: options.exclude ?? [],
+        configPath: options.config,
+      })
 
     const entryFiles = await expandEntries(paths, process.cwd())
     if (entryFiles.length === 0) {
@@ -1524,33 +1663,30 @@ program
         isExcluded,
         getPartialRule,
       })
-      return
-    }
-
-    if (options.compare) {
+    } else if (options.compare) {
       await runSyncOrCompare(options.compare, {
         dryRun: true,
         isIncluded,
         isExcluded,
         getPartialRule,
       })
-      return
-    }
-
-    if (options.scan) {
+    } else if (options.scan) {
       const result = await runScan(options.scan, allFiles)
       if (result.hasChanges) {
         process.exitCode = 1
       }
-      return
-    }
-
-    if (options.graph) {
+    } else if (options.graph && !cleanRequested) {
       log.success('Dependency graph printed')
-      return
+    } else if (!cleanRequested) {
+      log.success('Dependency analysis complete (pass --graph to print the graph)')
     }
 
-    log.success('Dependency analysis complete (pass --graph to print the graph)')
+    if (cleanRequested) {
+      await runClean(cleanPath, {
+        allFiles,
+        includePatterns,
+      })
+    }
   })
 
 program.parseAsync(process.argv).catch((error) => {
