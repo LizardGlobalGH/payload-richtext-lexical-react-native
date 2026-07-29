@@ -12,11 +12,14 @@
  *   node scripts/upstream-deps.mjs <files-or-folders...> --graph
  *   node scripts/upstream-deps.mjs <files-or-folders...> --clean
  *   node scripts/upstream-deps.mjs <files-or-folders...> --clean src
+ *   node scripts/upstream-deps.mjs --package-check
  *
  * --clean removes files under the given folder (default: src) that are not in
  * the dependency graph and not matched by include (include patterns that cover
  * the clean root itself are ignored so cleaning src with include:["src"] still
  * prunes unused files).
+ * --package-check prunes package.json "exports" and "publishConfig.exports"
+ * entries whose target files no longer exist (useful after --clean + build).
  *   node scripts/upstream-deps.mjs <files-or-folders...> --sync <upstream> --include src --exclude src/foo --config ./scripts/upstream-deps.json
  *
  * Config file (JSON object):
@@ -1749,6 +1752,193 @@ async function runClean(cleanRootArg, { allFiles, includePatterns, keepPatterns,
 }
 
 // ---------------------------------------------------------------------------
+// Package exports check
+// ---------------------------------------------------------------------------
+
+/**
+ * Resolve a package.json export target string to an absolute path.
+ * Returns null for non-filesystem targets (bare specifiers, builtins, URLs, null).
+ */
+function resolveExportTarget(target) {
+  if (typeof target !== 'string' || target.length === 0) return null
+  if (
+    target.startsWith('node:') ||
+    target.startsWith('http:') ||
+    target.startsWith('https:') ||
+    target.startsWith('data:')
+  ) {
+    return null
+  }
+  // Bare package names / subpath imports are not local files
+  if (!target.startsWith('.') && !isAbsolute(target)) return null
+  return isAbsolute(target) ? target : resolve(PROJECT_ROOT, target)
+}
+
+/**
+ * Recursively prune missing filesystem targets from an exports value.
+ * @returns {{ value: unknown, removed: { at: string, target: string }[], kept: boolean }}
+ */
+async function pruneExportValue(value, at) {
+  if (value === null) {
+    return { value: null, removed: [], kept: true }
+  }
+
+  if (typeof value === 'string') {
+    const abs = resolveExportTarget(value)
+    if (abs === null) {
+      return { value, removed: [], kept: true }
+    }
+    if (await fileExists(abs)) {
+      return { value, removed: [], kept: true }
+    }
+    return {
+      value: undefined,
+      removed: [{ at, target: value }],
+      kept: false,
+    }
+  }
+
+  if (Array.isArray(value)) {
+    const next = []
+    const removed = []
+    for (let i = 0; i < value.length; i++) {
+      const childAt = `${at}[${i}]`
+      const result = await pruneExportValue(value[i], childAt)
+      removed.push(...result.removed)
+      if (result.kept) next.push(result.value)
+    }
+    if (next.length === 0) {
+      return { value: undefined, removed, kept: false }
+    }
+    return { value: next, removed, kept: true }
+  }
+
+  if (typeof value === 'object') {
+    const next = {}
+    const removed = []
+    for (const [key, child] of Object.entries(value)) {
+      const childAt = `${at}.${key}`
+      const result = await pruneExportValue(child, childAt)
+      removed.push(...result.removed)
+      if (result.kept) next[key] = result.value
+    }
+    if (Object.keys(next).length === 0) {
+      return { value: undefined, removed, kept: false }
+    }
+    return { value: next, removed, kept: true }
+  }
+
+  return { value, removed: [], kept: true }
+}
+
+/**
+ * Prune a top-level exports map (or string export).
+ */
+async function pruneExportsField(exportsField, fieldLabel) {
+  if (exportsField === undefined) {
+    return { value: undefined, removed: [], changed: false }
+  }
+
+  if (typeof exportsField === 'string') {
+    const result = await pruneExportValue(exportsField, fieldLabel)
+    return {
+      value: result.kept ? result.value : undefined,
+      removed: result.removed,
+      changed: !result.kept,
+    }
+  }
+
+  if (!exportsField || typeof exportsField !== 'object' || Array.isArray(exportsField)) {
+    log.warn(`${fieldLabel} has an unsupported shape; skipping`)
+    return { value: exportsField, removed: [], changed: false }
+  }
+
+  const next = {}
+  const removed = []
+  let changed = false
+
+  for (const [key, value] of Object.entries(exportsField)) {
+    const at = `${fieldLabel}[${JSON.stringify(key)}]`
+    const result = await pruneExportValue(value, at)
+    removed.push(...result.removed)
+    if (result.kept) {
+      next[key] = result.value
+      if (JSON.stringify(result.value) !== JSON.stringify(value)) changed = true
+    } else {
+      changed = true
+      log.warn(`  prune ${at} (all targets missing)`)
+    }
+  }
+
+  return { value: next, removed, changed }
+}
+
+/**
+ * Check package.json exports + publishConfig.exports and remove targets whose files are gone.
+ */
+async function runPackageCheck() {
+  const packagePath = join(PROJECT_ROOT, 'package.json')
+  if (!(await fileExists(packagePath))) {
+    throw new Error(`package.json not found at ${packagePath}`)
+  }
+
+  const raw = await readFile(packagePath, 'utf8')
+  const pkg = JSON.parse(raw)
+  const indent = detectJsonIndent(raw)
+  const hadTrailingNewline = raw.endsWith('\n')
+
+  log.info('Checking package.json exports for missing target files')
+
+  const exportResult = await pruneExportsField(pkg.exports, 'exports')
+  const publishExports = pkg.publishConfig?.exports
+  const publishResult = await pruneExportsField(publishExports, 'publishConfig.exports')
+
+  const allRemoved = [...exportResult.removed, ...publishResult.removed]
+
+  if (allRemoved.length > 0) {
+    log.warn(`Missing export targets (${allRemoved.length}):`)
+    for (const item of allRemoved) {
+      log.warn(`  - ${item.at} → ${item.target}`)
+    }
+  }
+
+  let changed = exportResult.changed || publishResult.changed
+
+  if (exportResult.changed) {
+    if (exportResult.value === undefined) {
+      delete pkg.exports
+    } else {
+      pkg.exports = exportResult.value
+    }
+  }
+
+  if (publishResult.changed) {
+    if (!pkg.publishConfig || typeof pkg.publishConfig !== 'object') {
+      pkg.publishConfig = {}
+    }
+    if (publishResult.value === undefined || Object.keys(publishResult.value).length === 0) {
+      delete pkg.publishConfig.exports
+      if (Object.keys(pkg.publishConfig).length === 0) {
+        delete pkg.publishConfig
+      }
+    } else {
+      pkg.publishConfig.exports = publishResult.value
+    }
+  }
+
+  if (!changed) {
+    log.success('Package exports check complete (no missing targets)')
+    return { removed: allRemoved, changed: false }
+  }
+
+  await writeFile(packagePath, formatJson(pkg, indent, hadTrailingNewline), 'utf8')
+  log.success(
+    `Package exports check complete (${allRemoved.length} missing target(s) pruned from package.json)`,
+  )
+  return { removed: allRemoved, changed: true }
+}
+
+// ---------------------------------------------------------------------------
 // CLI
 // ---------------------------------------------------------------------------
 
@@ -1759,7 +1949,10 @@ program
   .description(
     'Build a local dependency graph from entry files/folders, and optionally sync, compare, or scan against an upstream package',
   )
-  .argument('<paths...>', 'entry files and/or folders to analyze (folders are scanned recursively)')
+  .argument(
+    '[paths...]',
+    'entry files and/or folders to analyze (folders are scanned recursively; optional with --package-check alone)',
+  )
   .option('--sync <path>', 'mirror upstream package into this project (requires upstream/src)')
   .option('--compare <path>', 'dry-run of --sync; report adds/updates/removes without changing files')
   .option(
@@ -1799,9 +1992,18 @@ program
     '--clean [path]',
     'remove files/folders under path that are not in the dependency graph or include list (default: src)',
   )
+  .option(
+    '--package-check',
+    'prune package.json exports / publishConfig.exports entries whose target files are missing',
+    false,
+  )
   .option('--debug', 'enable debug logging', false)
   .action(async (paths, options) => {
     log = createLogger(Boolean(options.debug))
+
+    const entryPaths = paths ?? []
+    const hasPaths = entryPaths.length > 0
+    const packageCheck = Boolean(options.packageCheck)
 
     const modes = [options.sync, options.compare, options.scan].filter(Boolean)
     if (modes.length > 1) {
@@ -1812,8 +2014,32 @@ program
     const cleanPath =
       typeof options.clean === 'string' && options.clean.length > 0 ? options.clean : 'src'
 
+    const needsGraph =
+      hasPaths ||
+      Boolean(options.sync) ||
+      Boolean(options.compare) ||
+      Boolean(options.scan) ||
+      Boolean(options.graph) ||
+      cleanRequested
+
+    if (!hasPaths && needsGraph) {
+      throw new Error(
+        'Entry paths are required for --sync, --compare, --scan, --graph, and --clean (omit them only with --package-check alone)',
+      )
+    }
+
+    if (!hasPaths && !packageCheck) {
+      throw new Error('Entry paths are required (or pass --package-check)')
+    }
+
     log.info(`Project root: ${PROJECT_ROOT}`)
-    log.debug(`Entry paths: ${paths.join(', ')}`)
+
+    if (!needsGraph) {
+      await runPackageCheck()
+      return
+    }
+
+    log.debug(`Entry paths: ${entryPaths.join(', ')}`)
 
     const { isIncluded, isExcluded, getPartialRule, includePatterns, keepPatterns, cleanMatchRegexes } =
       await resolveSyncConfig({
@@ -1824,7 +2050,7 @@ program
         configPath: options.config,
       })
 
-    const entryFiles = await expandEntries(paths, process.cwd())
+    const entryFiles = await expandEntries(entryPaths, process.cwd())
     if (entryFiles.length === 0) {
       throw new Error('No files found from the provided paths')
     }
@@ -1860,9 +2086,9 @@ program
       if (result.hasChanges) {
         process.exitCode = 1
       }
-    } else if (options.graph && !cleanRequested) {
+    } else if (options.graph && !cleanRequested && !packageCheck) {
       log.success('Dependency graph printed')
-    } else if (!cleanRequested) {
+    } else if (!cleanRequested && !packageCheck) {
       log.success('Dependency analysis complete (pass --graph to print the graph)')
     }
 
@@ -1873,6 +2099,10 @@ program
         keepPatterns,
         cleanMatchRegexes,
       })
+    }
+
+    if (packageCheck) {
+      await runPackageCheck()
     }
   })
 
