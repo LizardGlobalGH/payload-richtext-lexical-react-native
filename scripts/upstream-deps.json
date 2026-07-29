@@ -54,8 +54,11 @@
           "devDependencies.commander",
           "devDependencies.@swc/cli",
           "devDependencies.@swc/core",
-          "devDependencies.copyfiles"
-        ]
+          "devDependencies.copyfiles",
+          "devDependencies.@changesets/cli",
+          "devDependencies.@changesets/changelog-github",
+          "devDependencies.rimraf"
+       ]
       }
     }
   }
