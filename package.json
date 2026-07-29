@@ -22,11 +22,6 @@
   ],
   "type": "module",
   "exports": {
-    ".": {
-      "import": "./src/index.ts",
-      "types": "./src/index.ts",
-      "default": "./src/index.ts"
-    },
     "./client": {
       "import": "./src/exports/client/index.ts",
       "types": "./src/exports/client/index.ts",
@@ -41,16 +36,6 @@
       "import": "./src/exports/server/rsc.ts",
       "types": "./src/exports/server/rsc.ts",
       "default": "./src/exports/server/rsc.ts"
-    },
-    "./lexical/html": {
-      "import": "./src/lexical-proxy/@lexical-html.ts",
-      "types": "./src/lexical-proxy/@lexical-html.ts",
-      "default": "./src/lexical-proxy/@lexical-html.ts"
-    },
-    "./shared": {
-      "import": "./src/exports/shared.ts",
-      "types": "./src/exports/shared.ts",
-      "default": "./src/exports/shared.ts"
     },
     "./react-native": {
       "import": "./dist/exports/react-native/index.js",
@@ -167,11 +152,6 @@
   },
   "publishConfig": {
     "exports": {
-      ".": {
-        "import": "./dist/index.js",
-        "types": "./dist/index.d.ts",
-        "default": "./dist/index.js"
-      },
       "./client": {
         "import": "./dist/exports/client/index.js",
         "types": "./dist/exports/client/index.d.ts",
@@ -186,16 +166,6 @@
         "import": "./dist/exports/server/rsc.js",
         "types": "./dist/exports/server/rsc.d.ts",
         "default": "./dist/exports/server/rsc.js"
-      },
-      "./lexical/html": {
-        "import": "./dist/lexical-proxy/@lexical-html.js",
-        "types": "./dist/lexical-proxy/@lexical-html.d.ts",
-        "default": "./dist/lexical-proxy/@lexical-html.js"
-      },
-      "./shared": {
-        "import": "./dist/exports/shared.js",
-        "types": "./dist/exports/shared.d.ts",
-        "default": "./dist/exports/shared.js"
       }
     },
     "main": "./dist/index.js",
