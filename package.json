@@ -1,19 +1,19 @@
 {
   "name": "@lizardglobal/payload-richtext-lexical-react-native",
-  "version": "3.80.0",
-  "description": "The officially supported Lexical richtext adapter for Payload",
-  "homepage": "https://payloadcms.com",
+  "version": "0.0.1",
+  "description": "A React Native renderer for serialized Lexical content, designed to work seamlessly with Payload CMS.",
+  "homepage": "https://github.com/LizardGlobalGH/payload-richtext-lexical-react-native",
   "repository": {
     "type": "git",
-    "url": "https://github.com/payloadcms/payload.git"
+    "url": "https://github.com/LizardGlobalGH/payload-richtext-lexical-react-native.git"
   },
   "license": "MIT",
-  "author": "Payload <dev@payloadcms.com> (https://payloadcms.com)",
+  "author": "Joan Heimanu Teriihoania <joan@lizard.global> (https://joan-teriihoania.fr)",
   "maintainers": [
     {
-      "name": "Payload",
-      "email": "info@payloadcms.com",
-      "url": "https://payloadcms.com"
+      "name": "Joan Heimanu Teriihoania",
+      "email": "joan@lizard.global",
+      "url": "https://joan-teriihoania.fr"
     }
   ],
   "sideEffects": [
@@ -450,7 +450,8 @@
     }
   },
   "engines": {
-    "node": "^18.20.2 || >=20.9.0"
+    "node": "^18.20.2 || >=20.9.0",
+    "pnpm": "^9 || ^10"
   },
   "publishConfig": {
     "registry": "https://registry.npmjs.org/"
