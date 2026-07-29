@@ -10,12 +10,36 @@
  *   node scripts/upstream-deps.mjs <files-or-folders...> --compare <upstream>
  *   node scripts/upstream-deps.mjs <files-or-folders...> --scan <upstream>
  *   node scripts/upstream-deps.mjs <files-or-folders...> --graph
- *   node scripts/upstream-deps.mjs <files-or-folders...> --sync <upstream> --exclude src/foo --config ./upstream-deps.config.json
+ *   node scripts/upstream-deps.mjs <files-or-folders...> --sync <upstream> --include src --exclude src/foo --config ./scripts/upstream-deps.json
  *
  * Config file (JSON object):
  *   {
- *     "exclude": ["src/exports/react-native", "src/features/converters/lexicalToReactNative"]
+ *     "include": ["src", "package.json", "tsconfig.json"],
+ *     "exclude": ["README.md"],
+ *     "partial": {
+ *       "package.json": {
+ *         "keys": {
+ *           "include": ["dependencies", "devDependencies.typescript"],
+ *           "exclude": ["name", "version", "scripts"]
+ *         }
+ *       },
+ *       "src/example.ts": {
+ *         "lines": {
+ *           "include": [[10, 40]],
+ *           "exclude": [[1, 5], [100, 120]]
+ *         }
+ *       }
+ *     }
  *   }
+ *
+ * "include" (optional): when set, sync/compare only these files/folders.
+ * "exclude": always skipped. "partial" wins over exclude for the same path.
+ * CLI --include / --exclude fully override the corresponding config lists when provided.
+ * For each partial file, use either keys (JSON) or lines (text), and either
+ * include or exclude mode (not both). Nested JSON keys use dot paths; keys that
+ * contain dots must use brackets, e.g. exports["./react-native"], or an array
+ * path: ["exports", "./react-native"].
+ * Line ranges are 1-based and inclusive: [start, end].
  */
 
 import { Command } from 'commander'
@@ -28,6 +52,7 @@ import {
   readFile,
   rm,
   stat,
+  writeFile,
 } from 'node:fs/promises'
 import { dirname, extname, isAbsolute, join, relative, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -434,7 +459,7 @@ function printDependencyReport(entryFiles, graph, allFiles, unresolved, { showGr
 }
 
 // ---------------------------------------------------------------------------
-// Exclusion list / config
+// Exclusion list / config / partial updates
 // ---------------------------------------------------------------------------
 
 function collectOption(value, previous) {
@@ -444,44 +469,41 @@ function collectOption(value, previous) {
 /**
  * Normalize a user-provided path to a project-relative posix path.
  */
-function normalizeExcludePattern(raw) {
+function normalizeProjectPath(raw) {
   let value = String(raw).trim()
   if (!value) return null
 
-  // Strip trailing slashes except for root-style empties
   value = value.replace(/\\/g, '/').replace(/\/+$/, '')
 
   if (isAbsolute(value)) {
     value = toPosix(relative(PROJECT_ROOT, value))
   }
 
-  // Allow patterns that start with ./
   if (value.startsWith('./')) {
     value = value.slice(2)
   }
 
   if (!value || value.startsWith('..')) {
-    throw new Error(`Exclude path must be inside the project: ${raw}`)
+    throw new Error(`Path must be inside the project: ${raw}`)
   }
 
   return value
 }
 
 /**
- * Build a matcher for exclude patterns (files or folders).
+ * Build a path matcher for include/exclude patterns (files or folders).
  * A folder pattern matches the folder itself and every path under it.
  */
-function createExclusionMatcher(patterns) {
+function createPathMatcher(patterns) {
   const normalized = []
   for (const pattern of patterns) {
-    const next = normalizeExcludePattern(pattern)
+    const next = normalizeProjectPath(pattern)
     if (next) normalized.push(next)
   }
 
-  // Deduplicate
   const unique = [...new Set(normalized)].sort()
 
-  const isExcluded = (relPath) => {
+  const matches = (relPath) => {
     const rel = toPosix(relPath).replace(/^\.\//, '')
     for (const pattern of unique) {
       if (rel === pattern || rel.startsWith(`${pattern}/`)) {
@@ -491,13 +513,364 @@ function createExclusionMatcher(patterns) {
     return false
   }
 
-  return { patterns: unique, isExcluded }
+  return { patterns: unique, matches }
+}
+
+function filterTreeByInclude(tree, isIncluded) {
+  /** @type {Map<string, string>} */
+  const filtered = new Map()
+  for (const [rel, abs] of tree) {
+    if (isIncluded(rel)) filtered.set(rel, abs)
+  }
+  return filtered
+}
+
+function deepClone(value) {
+  return structuredClone(value)
+}
+
+/**
+ * Parse a nested key path.
+ * Supports:
+ *   - dot paths: "a.b.c"
+ *   - bracket segments for keys that contain dots: exports["./react-native"]
+ *   - pre-split arrays: ["exports", "./react-native"]
+ */
+function parseKeyPath(path) {
+  if (Array.isArray(path)) {
+    if (path.length === 0 || path.some((part) => typeof part !== 'string' || part.length === 0)) {
+      throw new Error(`Key path array must be a non-empty list of non-empty strings: ${JSON.stringify(path)}`)
+    }
+    return path
+  }
+
+  const input = String(path)
+  const parts = []
+  let i = 0
+
+  while (i < input.length) {
+    if (input[i] === '.' ) {
+      i += 1
+      continue
+    }
+
+    if (input[i] === '[') {
+      const quote = input[i + 1]
+      if (quote !== '"' && quote !== "'") {
+        throw new Error(`Key path bracket segment must be quoted: ${input}`)
+      }
+      i += 2
+      let value = ''
+      while (i < input.length && input[i] !== quote) {
+        if (input[i] === '\\' && i + 1 < input.length) {
+          value += input[i + 1]
+          i += 2
+          continue
+        }
+        value += input[i]
+        i += 1
+      }
+      if (input[i] !== quote || input[i + 1] !== ']') {
+        throw new Error(`Unterminated bracket key segment in path: ${input}`)
+      }
+      parts.push(value)
+      i += 2
+      continue
+    }
+
+    let value = ''
+    while (i < input.length && input[i] !== '.' && input[i] !== '[') {
+      value += input[i]
+      i += 1
+    }
+    if (!value) {
+      throw new Error(`Empty key segment in path: ${input}`)
+    }
+    parts.push(value)
+  }
+
+  if (parts.length === 0) {
+    throw new Error(`Empty key path: ${input}`)
+  }
+
+  return parts
+}
+
+function normalizeKeyPathList(list, context) {
+  if (!Array.isArray(list) || list.length === 0) {
+    throw new Error(`${context} must be a non-empty array`)
+  }
+
+  return list.map((item, index) => {
+    if (typeof item === 'string' || Array.isArray(item)) {
+      // Validate eagerly
+      parseKeyPath(item)
+      return item
+    }
+    throw new Error(
+      `${context}[${index}] must be a string or string array (got ${typeof item})`,
+    )
+  })
+}
+
+function hasAt(obj, path) {
+  const parts = parseKeyPath(path)
+  let cur = obj
+  for (const part of parts) {
+    if (cur === null || typeof cur !== 'object' || !Object.hasOwn(cur, part)) {
+      return false
+    }
+    cur = cur[part]
+  }
+  return true
+}
+
+function getAt(obj, path) {
+  const parts = parseKeyPath(path)
+  let cur = obj
+  for (const part of parts) {
+    if (cur === null || typeof cur !== 'object' || !Object.hasOwn(cur, part)) {
+      return undefined
+    }
+    cur = cur[part]
+  }
+  return cur
+}
+
+function setAt(obj, path, value) {
+  const parts = parseKeyPath(path)
+  let cur = obj
+  for (let i = 0; i < parts.length - 1; i++) {
+    const part = parts[i]
+    if (cur[part] === null || typeof cur[part] !== 'object') {
+      cur[part] = {}
+    }
+    cur = cur[part]
+  }
+  cur[parts[parts.length - 1]] = value
+}
+
+function deleteAt(obj, path) {
+  const parts = parseKeyPath(path)
+  let cur = obj
+  for (let i = 0; i < parts.length - 1; i++) {
+    const part = parts[i]
+    if (cur === null || typeof cur !== 'object' || !Object.hasOwn(cur, part)) {
+      return
+    }
+    cur = cur[part]
+  }
+  if (cur !== null && typeof cur === 'object') {
+    delete cur[parts[parts.length - 1]]
+  }
+}
+
+function detectJsonIndent(text) {
+  const match = text.match(/\n([ \t]+)"/)
+  return match ? match[1] : '    '
+}
+
+function formatJson(value, indent, hadTrailingNewline) {
+  const body = `${JSON.stringify(value, null, indent)}\n`
+  return hadTrailingNewline ? body : body.replace(/\n$/, '')
+}
+
+/**
+ * Validate and normalize a line range list: [[start, end], ...] (1-based, inclusive).
+ */
+function normalizeLineRanges(ranges, context) {
+  if (!Array.isArray(ranges)) {
+    throw new Error(`${context} must be an array of [start, end] ranges`)
+  }
+
+  return ranges.map((range, index) => {
+    if (!Array.isArray(range) || range.length !== 2) {
+      throw new Error(`${context}[${index}] must be a [start, end] pair`)
+    }
+    const start = Number(range[0])
+    const end = Number(range[1])
+    if (!Number.isInteger(start) || !Number.isInteger(end) || start < 1 || end < start) {
+      throw new Error(
+        `${context}[${index}] must be integers with 1 <= start <= end (got ${JSON.stringify(range)})`,
+      )
+    }
+    return [start, end]
+  })
+}
+
+function lineInRanges(lineNumber, ranges) {
+  return ranges.some(([start, end]) => lineNumber >= start && lineNumber <= end)
+}
+
+/**
+ * Parse one partial file rule.
+ * @returns {{ type: 'keys'|'lines', mode: 'include'|'exclude', paths?: string[], ranges?: number[][] }}
+ */
+function parsePartialRule(relPath, rule, context) {
+  if (rule === null || typeof rule !== 'object' || Array.isArray(rule)) {
+    throw new Error(`${context}: rule must be an object`)
+  }
+
+  const hasKeys = Object.hasOwn(rule, 'keys')
+  const hasLines = Object.hasOwn(rule, 'lines')
+  if (hasKeys === hasLines) {
+    throw new Error(`${context}: specify exactly one of "keys" or "lines"`)
+  }
+
+  if (hasKeys) {
+    const keys = rule.keys
+    if (keys === null || typeof keys !== 'object' || Array.isArray(keys)) {
+      throw new Error(`${context}.keys must be an object`)
+    }
+    const hasInclude = Object.hasOwn(keys, 'include')
+    const hasExclude = Object.hasOwn(keys, 'exclude')
+    if (hasInclude === hasExclude) {
+      throw new Error(`${context}.keys: specify exactly one of "include" or "exclude"`)
+    }
+    const mode = hasInclude ? 'include' : 'exclude'
+    const list = normalizeKeyPathList(keys[mode], `${context}.keys.${mode}`)
+    if (extname(relPath).toLowerCase() !== '.json') {
+      log.warn(`${context}: "keys" is intended for JSON files (${relPath})`)
+    }
+    return { type: 'keys', mode, paths: list }
+  }
+
+  const lines = rule.lines
+  if (lines === null || typeof lines !== 'object' || Array.isArray(lines)) {
+    throw new Error(`${context}.lines must be an object`)
+  }
+  const hasInclude = Object.hasOwn(lines, 'include')
+  const hasExclude = Object.hasOwn(lines, 'exclude')
+  if (hasInclude === hasExclude) {
+    throw new Error(`${context}.lines: specify exactly one of "include" or "exclude"`)
+  }
+  const mode = hasInclude ? 'include' : 'exclude'
+  const ranges = normalizeLineRanges(lines[mode], `${context}.lines.${mode}`)
+  if (ranges.length === 0) {
+    throw new Error(`${context}.lines.${mode} must contain at least one range`)
+  }
+  return { type: 'lines', mode, ranges }
+}
+
+/**
+ * Merge JSON content according to a keys include/exclude rule.
+ * Returns { text, changedPaths } where changedPaths lists key paths taken from upstream.
+ */
+function mergeJsonByKeys(localText, upstreamText, rule) {
+  let localValue
+  let upstreamValue
+  try {
+    localValue = localText.trim() === '' ? {} : JSON.parse(localText)
+  } catch (error) {
+    throw new Error(`Local JSON parse failed: ${error.message}`)
+  }
+  try {
+    upstreamValue = upstreamText.trim() === '' ? {} : JSON.parse(upstreamText)
+  } catch (error) {
+    throw new Error(`Upstream JSON parse failed: ${error.message}`)
+  }
+
+  if (
+    localValue === null ||
+    typeof localValue !== 'object' ||
+    Array.isArray(localValue) ||
+    upstreamValue === null ||
+    typeof upstreamValue !== 'object' ||
+    Array.isArray(upstreamValue)
+  ) {
+    throw new Error('Partial JSON key sync requires object roots (not arrays/primitives)')
+  }
+
+  const changedPaths = []
+  let result
+
+  if (rule.mode === 'include') {
+    result = deepClone(localValue)
+    for (const path of rule.paths) {
+      if (hasAt(upstreamValue, path)) {
+        setAt(result, path, deepClone(getAt(upstreamValue, path)))
+        changedPaths.push(path)
+      } else if (hasAt(result, path)) {
+        deleteAt(result, path)
+        changedPaths.push(path)
+      }
+    }
+  } else {
+    result = deepClone(upstreamValue)
+    for (const path of rule.paths) {
+      if (hasAt(localValue, path)) {
+        setAt(result, path, deepClone(getAt(localValue, path)))
+      } else {
+        deleteAt(result, path)
+      }
+    }
+  }
+
+  const indent = detectJsonIndent(localText || upstreamText)
+  const hadTrailingNewline = (localText || upstreamText).endsWith('\n')
+  const text = formatJson(result, indent, hadTrailingNewline)
+
+  return { text, changedPaths, mode: rule.mode }
+}
+
+/**
+ * Merge text files by 1-based inclusive line ranges.
+ */
+function mergeTextByLines(localText, upstreamText, rule) {
+  const localLines = localText.split('\n')
+  const upstreamLines = upstreamText.split('\n')
+  // Preserve whether original had trailing newline via split behavior:
+  // 'a\n'.split('\n') => ['a', '']; 'a'.split('\n') => ['a']
+  const maxLen = Math.max(localLines.length, upstreamLines.length)
+  const result = []
+  const changedLines = []
+
+  const allowed = (lineNumber) => {
+    const inRanges = lineInRanges(lineNumber, rule.ranges)
+    return rule.mode === 'include' ? inRanges : !inRanges
+  }
+
+  for (let i = 1; i <= maxLen; i++) {
+    const localLine = i <= localLines.length ? localLines[i - 1] : undefined
+    const upstreamLine = i <= upstreamLines.length ? upstreamLines[i - 1] : undefined
+
+    if (allowed(i)) {
+      if (upstreamLine !== undefined) {
+        result.push(upstreamLine)
+        if (upstreamLine !== localLine) changedLines.push(i)
+      } else if (localLine !== undefined) {
+        // Upstream shorter: drop local-only line only when updating that region
+        // Keep local if include/exclude still "allows" but upstream has nothing —
+        // for include, omit; for exclude (allowed=true means not protected), omit extra local lines
+        // beyond upstream so file shrinks with upstream.
+      }
+    } else if (localLine !== undefined) {
+      result.push(localLine)
+    }
+  }
+
+  // Re-join; if both inputs ended with \n, split produced trailing ''; keep that shape
+  const text = result.join('\n')
+  return { text, changedLines, mode: rule.mode }
+}
+
+async function applyPartialMerge(rel, sourceAbs, destAbs, rule) {
+  const upstreamText = await readFile(sourceAbs, 'utf8')
+  const localExists = await fileExists(destAbs)
+  const localText = localExists ? await readFile(destAbs, 'utf8') : rule.type === 'keys' ? '{}\n' : ''
+
+  if (rule.type === 'keys') {
+    return mergeJsonByKeys(localText, upstreamText, rule)
+  }
+  return mergeTextByLines(localText, upstreamText, rule)
 }
 
 /**
  * Load a JSON config file. Must be a plain object with keys.
  * Supported keys:
+ *   - include: string[] — when set, only these files/folders are synced/compared
  *   - exclude: string[] — files/folders skipped during sync/compare
+ *   - partial: { [relativePath]: { keys|lines: { include|exclude: ... } } }
  */
 async function loadConfigFile(configPath) {
   const abs = isAbsolute(configPath) ? configPath : resolve(process.cwd(), configPath)
@@ -518,11 +891,16 @@ async function loadConfigFile(configPath) {
     throw new Error(`Config file must contain a JSON object with keys: ${configPath}`)
   }
 
-  const knownKeys = new Set(['exclude'])
+  const knownKeys = new Set(['include', 'exclude', 'partial'])
   for (const key of Object.keys(parsed)) {
     if (!knownKeys.has(key)) {
       log.warn(`Unknown config key "${key}" in ${configPath} (ignored)`)
     }
+  }
+
+  const include = parsed.include ?? []
+  if (!Array.isArray(include) || include.some((item) => typeof item !== 'string')) {
+    throw new Error(`Config key "include" must be an array of strings: ${configPath}`)
   }
 
   const exclude = parsed.exclude ?? []
@@ -530,58 +908,151 @@ async function loadConfigFile(configPath) {
     throw new Error(`Config key "exclude" must be an array of strings: ${configPath}`)
   }
 
+  /** @type {Map<string, ReturnType<typeof parsePartialRule>>} */
+  const partial = new Map()
+  const partialRaw = parsed.partial ?? {}
+  if (partialRaw === null || typeof partialRaw !== 'object' || Array.isArray(partialRaw)) {
+    throw new Error(`Config key "partial" must be an object: ${configPath}`)
+  }
+
+  for (const [rawPath, rule] of Object.entries(partialRaw)) {
+    const rel = normalizeProjectPath(rawPath)
+    if (!rel) continue
+    partial.set(rel, parsePartialRule(rel, rule, `partial["${rel}"]`))
+  }
+
   log.info(`Loaded config from ${abs}`)
   log.debug(`Config keys: ${Object.keys(parsed).join(', ') || '(none)'}`)
 
-  return { exclude }
+  return { include, exclude, partial }
 }
 
 /**
- * Merge CLI --exclude paths with config.exclude.
+ * Resolve CLI include/exclude with config.include / config.exclude / config.partial.
+ * Non-empty CLI --include / --exclude lists fully replace the corresponding config lists.
  */
-async function resolveExclusions({ excludeFromCli = [], configPath }) {
+async function resolveSyncConfig({ includeFromCli = [], excludeFromCli = [], configPath }) {
   /** @type {string[]} */
-  const fromConfig = []
+  const includeFromConfig = []
+  /** @type {string[]} */
+  const excludeFromConfig = []
+  /** @type {Map<string, ReturnType<typeof parsePartialRule>>} */
+  let partial = new Map()
 
   if (configPath) {
     const config = await loadConfigFile(configPath)
-    fromConfig.push(...config.exclude)
+    includeFromConfig.push(...config.include)
+    excludeFromConfig.push(...config.exclude)
+    partial = config.partial
   }
 
-  const merged = [...fromConfig, ...excludeFromCli]
-  const matcher = createExclusionMatcher(merged)
+  const includePatterns = includeFromCli.length > 0 ? includeFromCli : includeFromConfig
+  const excludePatterns = excludeFromCli.length > 0 ? excludeFromCli : excludeFromConfig
 
-  if (matcher.patterns.length > 0) {
-    log.info(`Exclusion list (${matcher.patterns.length}):`)
-    for (const pattern of matcher.patterns) {
+  if (includeFromCli.length > 0 && includeFromConfig.length > 0) {
+    log.info('CLI --include overrides config "include"')
+  }
+  if (excludeFromCli.length > 0 && excludeFromConfig.length > 0) {
+    log.info('CLI --exclude overrides config "exclude"')
+  }
+
+  // Partial rules take precedence over full exclude for the same path
+  const excludeFiltered = excludePatterns.filter((pattern) => {
+    const rel = normalizeProjectPath(pattern)
+    if (rel && partial.has(rel)) {
+      log.warn(`"${rel}" is in both exclude and partial — using partial rules`)
+      return false
+    }
+    return true
+  })
+
+  const includeMatcher = createPathMatcher(includePatterns)
+  const excludeMatcher = createPathMatcher(excludeFiltered)
+
+  const includeEnabled = includeMatcher.patterns.length > 0
+
+  const isIncluded = (relPath) => {
+    if (!includeEnabled) return true
+    return includeMatcher.matches(relPath)
+  }
+
+  const isExcluded = (relPath) => {
+    const rel = toPosix(relPath).replace(/^\.\//, '')
+    if (partial.has(rel)) return false
+    return excludeMatcher.matches(rel)
+  }
+
+  if (includeEnabled) {
+    log.info(`Include list (${includeMatcher.patterns.length}) — sync limited to:`)
+    for (const pattern of includeMatcher.patterns) {
+      log.info(`  + ${pattern}`)
+    }
+  } else {
+    log.debug('No include filter configured (all files eligible)')
+  }
+
+  if (excludeMatcher.patterns.length > 0) {
+    log.info(`Exclusion list (${excludeMatcher.patterns.length}):`)
+    for (const pattern of excludeMatcher.patterns) {
       log.info(`  - ${pattern}`)
     }
   } else {
     log.debug('No exclusion patterns configured')
   }
 
-  return matcher
+  if (partial.size > 0) {
+    log.info(`Partial update rules (${partial.size}):`)
+    for (const [rel, rule] of [...partial.entries()].sort(([a], [b]) => a.localeCompare(b))) {
+      if (includeEnabled && !isIncluded(rel)) {
+        log.warn(`  - ${rel}  (partial rule ignored — path not in include list)`)
+        continue
+      }
+      if (rule.type === 'keys') {
+        const rendered = rule.paths
+          .map((path) => (Array.isArray(path) ? JSON.stringify(path) : path))
+          .join(', ')
+        log.info(`  - ${rel}  (keys ${rule.mode}: ${rendered})`)
+      } else {
+        const ranges = rule.ranges.map(([s, e]) => `${s}-${e}`).join(', ')
+        log.info(`  - ${rel}  (lines ${rule.mode}: ${ranges})`)
+      }
+    }
+  }
+
+  return {
+    isIncluded,
+    isExcluded,
+    getPartialRule: (relPath) => {
+      const rel = toPosix(relPath).replace(/^\.\//, '')
+      if (includeEnabled && !isIncluded(rel)) return null
+      return partial.get(rel) ?? null
+    },
+    partial,
+    includeEnabled,
+  }
 }
 
 /**
- * Split a sync/compare diff into actionable vs excluded buckets.
+ * Split a sync/compare diff into actionable, partial, and excluded buckets.
  */
-function partitionDiffByExclusion(diff, isExcluded) {
+function partitionDiff(diff, { isExcluded, getPartialRule }) {
   const split = (list) => {
     const actionable = []
+    const partial = []
     const excluded = []
     for (const rel of list) {
-      if (isExcluded(rel)) excluded.push(rel)
+      if (getPartialRule(rel)) partial.push(rel)
+      else if (isExcluded(rel)) excluded.push(rel)
       else actionable.push(rel)
     }
-    return { actionable, excluded }
+    return { actionable, partial, excluded }
   }
 
   const added = split(diff.added)
   const modified = split(diff.modified)
   const removed = split(diff.removed)
-  // Unchanged excluded files don't need warnings; keep them out of actionable noise
-  const unchanged = diff.unchanged.filter((rel) => !isExcluded(rel))
+
+  const unchanged = diff.unchanged.filter((rel) => !isExcluded(rel) && !getPartialRule(rel))
 
   return {
     actionable: {
@@ -589,6 +1060,11 @@ function partitionDiffByExclusion(diff, isExcluded) {
       modified: modified.actionable,
       removed: removed.actionable,
       unchanged,
+    },
+    partial: {
+      added: added.partial,
+      modified: modified.partial,
+      removed: removed.partial,
     },
     excluded: {
       added: added.excluded,
@@ -709,13 +1185,18 @@ async function diffTrees(sourceTree, destTree) {
   return { added, removed, modified, unchanged }
 }
 
-function printTreeDiff(diff, { dryRun, excludedDiff }) {
+function printTreeDiff(diff, { dryRun, excludedDiff, partialDiff }) {
   const verb = dryRun ? 'Would' : 'Will'
   log.info(`${dryRun ? 'Compare' : 'Sync'} summary:`)
   log.info(`  added:     ${diff.added.length}`)
   log.info(`  modified:  ${diff.modified.length}`)
   log.info(`  removed:   ${diff.removed.length}`)
   log.info(`  unchanged: ${diff.unchanged.length}`)
+  if (partialDiff) {
+    const partialCount =
+      partialDiff.added.length + partialDiff.modified.length + partialDiff.removed.length
+    log.info(`  partial:   ${partialCount}`)
+  }
   if (excludedDiff) {
     const skipped =
       excludedDiff.added.length + excludedDiff.modified.length + excludedDiff.removed.length
@@ -756,7 +1237,7 @@ function warnExcludedEdits(excludedDiff, { dryRun }) {
   }
 }
 
-async function applySync(sourceTree, projectRoot, diff) {
+async function applyFullSync(sourceTree, projectRoot, diff) {
   for (const rel of [...diff.added, ...diff.modified]) {
     const sourceAbs = sourceTree.get(rel)
     const destAbs = join(projectRoot, rel)
@@ -771,7 +1252,6 @@ async function applySync(sourceTree, projectRoot, diff) {
     log.debug(`Removed ${rel}`)
   }
 
-  // Clean empty directories left behind by removals (best-effort, deepest first)
   const dirs = [
     ...new Set(diff.removed.map((rel) => toPosix(dirname(rel))).filter((d) => d && d !== '.')),
   ].sort((a, b) => b.split('/').length - a.split('/').length)
@@ -790,33 +1270,111 @@ async function applySync(sourceTree, projectRoot, diff) {
   }
 }
 
-async function runSyncOrCompare(upstreamPath, { dryRun, isExcluded }) {
+/**
+ * Apply or preview partial merges. Returns stats.
+ */
+async function processPartialFiles(partialDiff, sourceTree, { getPartialRule, dryRun }) {
+  const updates = []
+  const skippedProtected = []
+  const removalBlocked = []
+
+  for (const rel of partialDiff.removed) {
+    removalBlocked.push(rel)
+    log.warn(`  ! ${rel}  (partial rule set — will not remove; delete upstream file manually if intended)`)
+  }
+
+  for (const rel of [...partialDiff.added, ...partialDiff.modified]) {
+    const rule = getPartialRule(rel)
+    const sourceAbs = sourceTree.get(rel)
+    const destAbs = join(PROJECT_ROOT, rel)
+
+    try {
+      const localExists = await fileExists(destAbs)
+      const localText = localExists ? await readFile(destAbs, 'utf8') : ''
+      const merged = await applyPartialMerge(rel, sourceAbs, destAbs, rule)
+
+      if (merged.text === localText) {
+        skippedProtected.push(rel)
+        log.warn(
+          `  ~ ${rel}  (partial: no allowed changes; protected regions still differ from upstream)`,
+        )
+        continue
+      }
+
+      updates.push(rel)
+      if (rule.type === 'keys') {
+        const detail =
+          rule.mode === 'include'
+            ? `keys include ${rule.paths.join(', ')}`
+            : `keys exclude ${rule.paths.join(', ')}`
+        log.info(`  ~ ${rel}  (${dryRun ? 'would partially update' : 'partial update'}: ${detail})`)
+        if (merged.changedPaths?.length) {
+          for (const path of merged.changedPaths) {
+            log.debug(`      key ${path}`)
+          }
+        }
+      } else {
+        const ranges = rule.ranges.map(([s, e]) => `${s}-${e}`).join(', ')
+        const detail = `lines ${rule.mode} ${ranges}`
+        log.info(`  ~ ${rel}  (${dryRun ? 'would partially update' : 'partial update'}: ${detail})`)
+        if (merged.changedLines?.length) {
+          log.debug(`      lines: ${merged.changedLines.join(', ')}`)
+        }
+      }
+
+      if (!dryRun) {
+        await ensureParentDir(destAbs)
+        await writeFile(destAbs, merged.text, 'utf8')
+      }
+    } catch (error) {
+      log.error(`Partial update failed for ${rel}: ${error.message}`)
+      throw error
+    }
+  }
+
+  return { updates, skippedProtected, removalBlocked }
+}
+
+async function runSyncOrCompare(upstreamPath, { dryRun, isIncluded, isExcluded, getPartialRule }) {
   const upstream = await resolveUpstream(upstreamPath)
   log.info(`${dryRun ? 'Comparing' : 'Syncing'} from ${upstream}`)
   log.info(`Target project: ${PROJECT_ROOT}`)
 
-  const sourceTree = await collectRelativeTree(upstream)
-  const destTree = await collectManagedDestTree(PROJECT_ROOT, sourceTree)
+  const sourceTreeAll = await collectRelativeTree(upstream)
+  const sourceTree = filterTreeByInclude(sourceTreeAll, isIncluded)
+  const destTreeAll = await collectManagedDestTree(PROJECT_ROOT, sourceTreeAll)
+  const destTree = filterTreeByInclude(destTreeAll, isIncluded)
 
-  log.debug(`Upstream files: ${sourceTree.size}`)
-  log.debug(`Managed project files: ${destTree.size}`)
+  if (sourceTree.size !== sourceTreeAll.size) {
+    log.info(
+      `Include filter: ${sourceTree.size}/${sourceTreeAll.size} upstream files in scope`,
+    )
+  }
+
+  log.debug(`Upstream files (in scope): ${sourceTree.size}`)
+  log.debug(`Managed project files (in scope): ${destTree.size}`)
 
   const fullDiff = await diffTrees(sourceTree, destTree)
-  const { actionable, excluded } = partitionDiffByExclusion(fullDiff, isExcluded)
+  const { actionable, partial, excluded } = partitionDiff(fullDiff, { isExcluded, getPartialRule })
 
-  printTreeDiff(actionable, { dryRun, excludedDiff: excluded })
+  printTreeDiff(actionable, { dryRun, excludedDiff: excluded, partialDiff: partial })
   warnExcludedEdits(excluded, { dryRun })
+
+  if (partial.added.length + partial.modified.length + partial.removed.length > 0) {
+    log.info(`Partial updates (${dryRun ? 'preview' : 'apply'}):`)
+  }
+  const partialStats = await processPartialFiles(partial, sourceTree, { getPartialRule, dryRun })
 
   if (dryRun) {
     log.success('Compare complete (no files were changed)')
-    return { actionable, excluded }
+    return { actionable, partial, excluded, partialStats }
   }
 
-  await applySync(sourceTree, PROJECT_ROOT, actionable)
+  await applyFullSync(sourceTree, PROJECT_ROOT, actionable)
   log.success(
-    `Sync complete (${actionable.added.length} added, ${actionable.modified.length} updated, ${actionable.removed.length} removed, ${excluded.added.length + excluded.modified.length + excluded.removed.length} excluded skipped)`,
+    `Sync complete (${actionable.added.length} added, ${actionable.modified.length} updated, ${actionable.removed.length} removed, ${partialStats.updates.length} partial, ${excluded.added.length + excluded.modified.length + excluded.removed.length} excluded skipped)`,
   )
-  return { actionable, excluded }
+  return { actionable, partial, excluded, partialStats }
 }
 
 // ---------------------------------------------------------------------------
@@ -911,14 +1469,20 @@ program
   )
   .option('--graph', 'print the full dependency graph (file → local imports)', false)
   .option(
+    '--include <path>',
+    'only sync/compare this file or folder (repeatable; overrides config "include" when set)',
+    collectOption,
+    [],
+  )
+  .option(
     '--exclude <path>',
-    'file or folder to skip during sync/compare (repeatable; merges with config)',
+    'file or folder to skip during sync/compare (repeatable; overrides config "exclude" when set)',
     collectOption,
     [],
   )
   .option(
     '-c, --config <path>',
-    'JSON config file path (object with keys; supports "exclude": string[])',
+    'JSON config file path (object with keys; supports "include", "exclude", and "partial")',
   )
   .option('--debug', 'enable debug logging', false)
   .action(async (paths, options) => {
@@ -932,7 +1496,8 @@ program
     log.info(`Project root: ${PROJECT_ROOT}`)
     log.debug(`Entry paths: ${paths.join(', ')}`)
 
-    const { isExcluded } = await resolveExclusions({
+    const { isIncluded, isExcluded, getPartialRule } = await resolveSyncConfig({
+      includeFromCli: options.include ?? [],
       excludeFromCli: options.exclude ?? [],
       configPath: options.config,
     })
@@ -953,12 +1518,22 @@ program
     })
 
     if (options.sync) {
-      await runSyncOrCompare(options.sync, { dryRun: false, isExcluded })
+      await runSyncOrCompare(options.sync, {
+        dryRun: false,
+        isIncluded,
+        isExcluded,
+        getPartialRule,
+      })
       return
     }
 
     if (options.compare) {
-      await runSyncOrCompare(options.compare, { dryRun: true, isExcluded })
+      await runSyncOrCompare(options.compare, {
+        dryRun: true,
+        isIncluded,
+        isExcluded,
+        getPartialRule,
+      })
       return
     }
 

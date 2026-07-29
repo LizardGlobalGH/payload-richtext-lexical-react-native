@@ -1,9 +1,36 @@
 {
-    "exclude": [
-        ".swcrc",
-        "eslint.config.js",
-        "package.json",
-        "README.md",
-        "tsconfig.json"
-    ]
+  "include": [
+    "src",
+    "package.json",
+    "tsconfig.json"
+  ],
+  "exclude": [
+    ".swcrc",
+    "eslint.config.js",
+    "README.md"
+  ],
+  "partial": {
+    "package.json": {
+      "keys": {
+        "exclude": [
+          "name",
+          "version",
+          "description",
+          "homepage",
+          "repository",
+          "author",
+          "maintainers",
+          "scripts.upstream:deps",
+          "exports[\"./react-native\"]",
+          "peerDependencies.react-native",
+          "peerDependenciesMeta.react-native"
+        ]
+      }
+    },
+    "tsconfig.json": {
+      "keys": {
+        "exclude": ["compilerOptions.paths"]
+      }
+    }
+  }
 }
