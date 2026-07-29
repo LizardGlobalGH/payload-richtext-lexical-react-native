@@ -360,6 +360,7 @@
     "copyfiles": "copyfiles -u 1 \"src/**/*.{html,css,ttf,woff,woff2,eot,svg,jpg,png,json}\" dist/",
     "copyfiles:debug": "copyfiles -u 1 \"src/**/*.{html,css,scss,ttf,woff,woff2,eot,svg,jpg,png,json}\" dist/",
     "internal:install": "node ./scripts/internal-install.mjs",
+    "upstream:deps": "node ./scripts/upstream-deps.mjs",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "changeset": "changeset",
