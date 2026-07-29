@@ -361,7 +361,11 @@
     "copyfiles:debug": "copyfiles -u 1 \"src/**/*.{html,css,scss,ttf,woff,woff2,eot,svg,jpg,png,json}\" dist/",
     "internal:install": "node ./scripts/internal-install.mjs",
     "lint": "eslint .",
-    "lint:fix": "eslint . --fix"
+    "lint:fix": "eslint . --fix",
+    "changeset": "changeset",
+    "changeset:version": "changeset version",
+    "release": "pnpm clean && pnpm build && node ./scripts/changeset-publish.mjs",
+    "prepublishOnly": "pnpm build"
   },
   "lint-staged": {
     "**/package.json": "sort-package-json",
@@ -402,6 +406,8 @@
     "uuid": "10.0.0"
   },
   "devDependencies": {
+    "@changesets/changelog-github": "^0.5.2",
+    "@changesets/cli": "^2.31.1",
     "@babel/cli": "7.27.2",
     "@babel/core": "7.27.3",
     "@babel/preset-env": "7.27.2",
