@@ -23,7 +23,12 @@
           "scripts.upstream:deps",
           "exports[\"./react-native\"]",
           "peerDependencies.react-native",
-          "peerDependenciesMeta.react-native"
+          "peerDependenciesMeta.react-native",
+          "peerDependencies.payload",
+          "devDependencies.payload",
+          "devDependencies.@payloadcms/eslint-config",
+          "dependencies.@payloadcms/translations",
+          "dependencies.@payloadcms/ui"
         ]
       }
     },
