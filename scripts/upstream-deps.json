@@ -42,7 +42,10 @@
           "devDependencies.@payloadcms/eslint-config",
           "dependencies.@payloadcms/translations",
           "dependencies.@payloadcms/ui",
-          "devDependencies.commander"
+          "devDependencies.commander",
+          "devDependencies.@swc/cli",
+          "devDependencies.@swc/core",
+          "devDependencies.copyfiles"
         ]
       }
     }
