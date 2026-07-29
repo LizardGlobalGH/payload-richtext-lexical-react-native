@@ -219,8 +219,6 @@ function ArticleContent({ article }) {
 
 # Implementation
 
-> *The following sections provide an overview of the technical rationale behind the implementation, the public API, expected usage flow, edge cases and concerns, and questions for maintainers. This is intended to give maintainers a comprehensive understanding of the implementation decisions and trade-offs made in this renderer.*
-
 This implementation adds **React Native rendering support** to the `@lizardglobal/payload-richtext-lexical-react-native` package by adding a similar entry point `@lizardglobal/payload-richtext-lexical-react-native/react-native` as the existing renderers (and specifically the React renderer) but with RN primitives.
 
 The RN entrypoint is intended to provide a renderer-only API for serialized Lexical content in RN applications. I tried to keep the exposed API as close as possible to the existing React renderer so we can use it as a drop-in replacement in most cases, while still allowing for platform-specific behavior through converter and primitive overrides.
