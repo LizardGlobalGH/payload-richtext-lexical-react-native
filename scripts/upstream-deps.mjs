@@ -41,9 +41,10 @@
  *
  * "include" (optional): when set, sync/compare only these files/folders.
  * "exclude": always skipped during sync. "partial" wins over exclude for the same path.
- * "keep": files/folders never removed by --clean (even if outside the dependency graph).
- * "clean": { "match": string[] } — regexes; when set, --clean only removes paths that match
- *   at least one pattern (e.g. only .ts/.js). Non-matching files like .css/.scss are kept.
+ * "clean": {
+ *   "keep": string[] — files/folders never removed by --clean (file entries expand via deps)
+ *   "match": string[] — regexes; when set, --clean only removes paths matching at least one
+ * }
  * CLI --include / --exclude / --keep / --clean-match fully override the corresponding config lists when provided.
  * For each partial file, use either keys (JSON) or lines (text), and either
  * include or exclude mode (not both). Nested JSON keys use dot paths; keys that
@@ -899,8 +900,7 @@ async function applyPartialMerge(rel, sourceAbs, destAbs, rule) {
  * Supported keys:
  *   - include: string[] — when set, only these files/folders are synced/compared
  *   - exclude: string[] — files/folders skipped during sync/compare
- *   - keep: string[] — files/folders never removed by --clean
- *   - clean: { match?: string[] } — regexes limiting which files --clean may remove
+ *   - clean: { keep?: string[], match?: string[] } — clean keep paths and removal regexes
  *   - partial: { [relativePath]: { keys|lines: { include|exclude: ... } } }
  */
 async function loadConfigFile(configPath) {
@@ -922,7 +922,7 @@ async function loadConfigFile(configPath) {
     throw new Error(`Config file must contain a JSON object with keys: ${configPath}`)
   }
 
-  const knownKeys = new Set(['include', 'exclude', 'keep', 'clean', 'partial'])
+  const knownKeys = new Set(['include', 'exclude', 'clean', 'partial'])
   for (const key of Object.keys(parsed)) {
     if (!knownKeys.has(key)) {
       log.warn(`Unknown config key "${key}" in ${configPath} (ignored)`)
@@ -939,21 +939,22 @@ async function loadConfigFile(configPath) {
     throw new Error(`Config key "exclude" must be an array of strings: ${configPath}`)
   }
 
-  const keep = parsed.keep ?? []
-  if (!Array.isArray(keep) || keep.some((item) => typeof item !== 'string')) {
-    throw new Error(`Config key "keep" must be an array of strings: ${configPath}`)
-  }
-
   const cleanRaw = parsed.clean ?? {}
   if (cleanRaw === null || typeof cleanRaw !== 'object' || Array.isArray(cleanRaw)) {
     throw new Error(`Config key "clean" must be an object: ${configPath}`)
   }
-  const knownCleanKeys = new Set(['match'])
+  const knownCleanKeys = new Set(['match', 'keep'])
   for (const key of Object.keys(cleanRaw)) {
     if (!knownCleanKeys.has(key)) {
       log.warn(`Unknown clean config key "${key}" in ${configPath} (ignored)`)
     }
   }
+
+  const keep = cleanRaw.keep ?? []
+  if (!Array.isArray(keep) || keep.some((item) => typeof item !== 'string')) {
+    throw new Error(`Config key "clean.keep" must be an array of strings: ${configPath}`)
+  }
+
   const cleanMatch = cleanRaw.match ?? []
   if (!Array.isArray(cleanMatch) || cleanMatch.some((item) => typeof item !== 'string')) {
     throw new Error(`Config key "clean.match" must be an array of strings: ${configPath}`)
@@ -1022,7 +1023,7 @@ async function resolveSyncConfig({
     log.info('CLI --exclude overrides config "exclude"')
   }
   if (keepFromCli.length > 0 && keepFromConfig.length > 0) {
-    log.info('CLI --keep overrides config "keep"')
+    log.info('CLI --keep overrides config "clean.keep"')
   }
   if (cleanMatchFromCli.length > 0 && cleanMatchFromConfig.length > 0) {
     log.info('CLI --clean-match overrides config "clean.match"')
@@ -1079,7 +1080,7 @@ async function resolveSyncConfig({
       log.info(`  * ${pattern}`)
     }
   } else {
-    log.debug('No clean keep patterns configured')
+    log.debug('No clean.keep patterns configured')
   }
 
   const cleanMatchRegexes = compileCleanMatchRegexes(cleanMatchPatterns)
@@ -1739,7 +1740,7 @@ program
   )
   .option(
     '--keep <path>',
-    'file or folder never removed by --clean (repeatable; overrides config "keep" when set)',
+    'file or folder never removed by --clean (repeatable; overrides config "clean.keep" when set)',
     collectOption,
     [],
   )
@@ -1751,7 +1752,7 @@ program
   )
   .option(
     '-c, --config <path>',
-    'JSON config file path (object with keys; supports "include", "exclude", "keep", "clean", and "partial")',
+    'JSON config file path (object with keys; supports "include", "exclude", "clean", and "partial")',
   )
   .option(
     '--clean [path]',
