@@ -42,7 +42,8 @@
  * "include" (optional): when set, sync/compare only these files/folders.
  * "exclude": always skipped during sync. "partial" wins over exclude for the same path.
  * "clean": {
- *   "keep": string[] — files/folders never removed by --clean (file entries expand via deps)
+ *   "keep": string[] — never removed by --clean; folder/exact entries also skip sync overwrite/delete
+ *     (for --clean, file entries expand via their dependency graphs)
  *   "match": string[] — regexes; when set, --clean only removes paths matching at least one
  * }
  * CLI --include / --exclude / --keep / --clean-match fully override the corresponding config lists when provided.
@@ -1130,16 +1131,72 @@ async function resolveSyncConfig({
 }
 
 /**
- * Split a sync/compare diff into actionable, partial, and excluded buckets.
+ * Resolve clean.keep into a protection set.
+ *
+ * Sync: only folder/prefix keep patterns — exact file entries are clean roots, not sync locks.
+ *        Expanding entry graphs (e.g. src/index.ts) would block almost all upstream syncs.
+ * Clean: file keep entries also expand through local dependency graphs; folders still match.
  */
-function partitionDiff(diff, { isExcluded, getPartialRule }) {
+async function resolveKeepProtection(keepPatterns = [], { expandFileGraphs = false } = {}) {
+  const keepFileEntries = []
+  const keepExactFiles = []
+  const keepFolderPatterns = []
+
+  for (const pattern of keepPatterns) {
+    const abs = join(PROJECT_ROOT, pattern)
+    try {
+      const s = await stat(abs)
+      if (s.isFile()) {
+        if (expandFileGraphs) {
+          keepExactFiles.push(toPosix(pattern).replace(/^\.\//, ''))
+          keepFileEntries.push(abs)
+        }
+        continue
+      }
+    } catch {
+      // missing — treat as folder/prefix pattern
+    }
+    keepFolderPatterns.push(pattern)
+  }
+
+  const protectedFiles = new Set(keepExactFiles)
+
+  if (expandFileGraphs && keepFileEntries.length > 0) {
+    log.info(`Expanding dependency graph for ${keepFileEntries.length} keep file(s)`)
+    const { allFiles: keepDeps } = await buildDependencyGraph(keepFileEntries)
+    for (const abs of keepDeps) {
+      protectedFiles.add(toPosix(relative(PROJECT_ROOT, abs)))
+    }
+    log.info(`  keep graph size: ${keepDeps.length}`)
+  }
+
+  const folderMatcher = createPathMatcher(keepFolderPatterns)
+
+  const isKept = (relPath) => {
+    const rel = toPosix(relPath).replace(/^\.\//, '')
+    return protectedFiles.has(rel) || folderMatcher.matches(rel)
+  }
+
+  return {
+    isKept,
+    protectedFiles,
+    folderPatterns: folderMatcher.patterns,
+  }
+}
+
+/**
+ * Split a sync/compare diff into actionable, partial, and excluded buckets.
+ * clean.keep folder/file patterns are treated like exclude for sync (no overwrite / no delete).
+ * Keep file graphs are NOT expanded here — use folder keeps for fork-owned trees.
+ */
+function partitionDiff(diff, { isExcluded, getPartialRule, isKept }) {
   const split = (list) => {
     const actionable = []
     const partial = []
     const excluded = []
     for (const rel of list) {
       if (getPartialRule(rel)) partial.push(rel)
-      else if (isExcluded(rel)) excluded.push(rel)
+      else if (isKept?.(rel) || isExcluded(rel)) excluded.push(rel)
       else actionable.push(rel)
     }
     return { actionable, partial, excluded }
@@ -1149,7 +1206,9 @@ function partitionDiff(diff, { isExcluded, getPartialRule }) {
   const modified = split(diff.modified)
   const removed = split(diff.removed)
 
-  const unchanged = diff.unchanged.filter((rel) => !isExcluded(rel) && !getPartialRule(rel))
+  const unchanged = diff.unchanged.filter(
+    (rel) => !isExcluded(rel) && !getPartialRule(rel) && !isKept?.(rel),
+  )
 
   return {
     actionable: {
@@ -1167,7 +1226,7 @@ function partitionDiff(diff, { isExcluded, getPartialRule }) {
       added: added.excluded,
       modified: modified.excluded,
       removed: removed.excluded,
-      unchanged: diff.unchanged.filter((rel) => isExcluded(rel)),
+      unchanged: diff.unchanged.filter((rel) => isExcluded(rel) || isKept?.(rel)),
     },
   }
 }
@@ -1312,9 +1371,9 @@ function printTreeDiff(diff, { dryRun, excludedDiff, partialDiff }) {
 }
 
 /**
- * Warn when excluded paths differ from upstream (would have been edited by sync).
+ * Warn when excluded/kept paths differ from upstream (would have been edited by sync).
  */
-function warnExcludedEdits(excludedDiff, { dryRun }) {
+function warnExcludedEdits(excludedDiff, { dryRun, isKept }) {
   const edited = [
     ...excludedDiff.added.map((rel) => ({ rel, kind: 'added' })),
     ...excludedDiff.modified.map((rel) => ({ rel, kind: 'modified' })),
@@ -1322,15 +1381,16 @@ function warnExcludedEdits(excludedDiff, { dryRun }) {
   ]
 
   if (edited.length === 0) {
-    log.debug('No excluded files differ from upstream')
+    log.debug('No excluded/kept files differ from upstream')
     return
   }
 
   const action = dryRun ? 'differ from upstream' : 'differ from upstream and were left untouched'
-  log.warn(`Excluded files ${action} (${edited.length}):`)
+  log.warn(`Excluded/kept files ${action} (${edited.length}):`)
   for (const { rel, kind } of edited) {
     const marker = kind === 'added' ? '+' : kind === 'removed' ? '-' : '~'
-    log.warn(`  ${marker} ${rel}  (excluded, ${kind})`)
+    const reason = isKept?.(rel) ? 'keep' : 'excluded'
+    log.warn(`  ${marker} ${rel}  (${reason}, ${kind})`)
   }
 }
 
@@ -1432,7 +1492,10 @@ async function processPartialFiles(partialDiff, sourceTree, { getPartialRule, dr
   return { updates, skippedProtected, removalBlocked }
 }
 
-async function runSyncOrCompare(upstreamPath, { dryRun, isIncluded, isExcluded, getPartialRule }) {
+async function runSyncOrCompare(
+  upstreamPath,
+  { dryRun, isIncluded, isExcluded, getPartialRule, keepPatterns },
+) {
   const upstream = await resolveUpstream(upstreamPath)
   log.info(`${dryRun ? 'Comparing' : 'Syncing'} from ${upstream}`)
   log.info(`Target project: ${PROJECT_ROOT}`)
@@ -1451,11 +1514,17 @@ async function runSyncOrCompare(upstreamPath, { dryRun, isIncluded, isExcluded, 
   log.debug(`Upstream files (in scope): ${sourceTree.size}`)
   log.debug(`Managed project files (in scope): ${destTree.size}`)
 
+  const { isKept } = await resolveKeepProtection(keepPatterns, { expandFileGraphs: false })
+
   const fullDiff = await diffTrees(sourceTree, destTree)
-  const { actionable, partial, excluded } = partitionDiff(fullDiff, { isExcluded, getPartialRule })
+  const { actionable, partial, excluded } = partitionDiff(fullDiff, {
+    isExcluded,
+    getPartialRule,
+    isKept,
+  })
 
   printTreeDiff(actionable, { dryRun, excludedDiff: excluded, partialDiff: partial })
-  warnExcludedEdits(excluded, { dryRun })
+  warnExcludedEdits(excluded, { dryRun, isKept })
 
   if (partial.added.length + partial.modified.length + partial.removed.length > 0) {
     log.info(`Partial updates (${dryRun ? 'preview' : 'apply'}):`)
@@ -1469,7 +1538,7 @@ async function runSyncOrCompare(upstreamPath, { dryRun, isIncluded, isExcluded, 
 
   await applyFullSync(sourceTree, PROJECT_ROOT, actionable)
   log.success(
-    `Sync complete (${actionable.added.length} added, ${actionable.modified.length} updated, ${actionable.removed.length} removed, ${partialStats.updates.length} partial, ${excluded.added.length + excluded.modified.length + excluded.removed.length} excluded skipped)`,
+    `Sync complete (${actionable.added.length} added, ${actionable.modified.length} updated, ${actionable.removed.length} removed, ${partialStats.updates.length} partial, ${excluded.added.length + excluded.modified.length + excluded.removed.length} excluded/kept skipped)`,
   )
   return { actionable, partial, excluded, partialStats }
 }
@@ -1598,40 +1667,12 @@ async function runClean(cleanRootArg, { allFiles, includePatterns, keepPatterns,
     )
   }
 
-  // Split keep patterns: existing files → expand deps; folders/globs → path matcher
-  const keepFileEntries = []
-  const keepFolderPatterns = []
-  for (const pattern of keepPatterns ?? []) {
-    const abs = join(PROJECT_ROOT, pattern)
-    try {
-      const s = await stat(abs)
-      if (s.isFile()) {
-        keepFileEntries.push(abs)
-        continue
-      }
-    } catch {
-      // missing path — still treat as folder/prefix pattern
-    }
-    keepFolderPatterns.push(pattern)
-  }
-
-  if (keepFileEntries.length > 0) {
-    log.info(
-      `Expanding dependency graph for ${keepFileEntries.length} keep file(s)`,
-    )
-    const { allFiles: keepDeps } = await buildDependencyGraph(keepFileEntries)
-    for (const abs of keepDeps) {
-      graphKeep.add(toPosix(relative(PROJECT_ROOT, abs)))
-    }
-    log.info(`  keep graph size: ${keepDeps.length}`)
-  }
-
+  const { isKept } = await resolveKeepProtection(keepPatterns, { expandFileGraphs: true })
   const keepIncludeMatcher = createPathMatcher(keepIncludePatterns)
-  const cleanKeepMatcher = createPathMatcher(keepFolderPatterns)
   const matchRegexes = cleanMatchRegexes ?? []
 
   const shouldKeep = (rel) => {
-    if (graphKeep.has(rel) || keepIncludeMatcher.matches(rel) || cleanKeepMatcher.matches(rel)) {
+    if (graphKeep.has(rel) || keepIncludeMatcher.matches(rel) || isKept(rel)) {
       return true
     }
     // When clean.match is set, non-matching files (e.g. .css/.scss) are never removed
@@ -1740,7 +1781,7 @@ program
   )
   .option(
     '--keep <path>',
-    'file or folder never removed by --clean (repeatable; overrides config "clean.keep" when set)',
+    'folder/file protected from --clean and sync overwrite/delete (repeatable; overrides config "clean.keep" when set; file graphs expand only for --clean)',
     collectOption,
     [],
   )
@@ -1804,6 +1845,7 @@ program
         isIncluded,
         isExcluded,
         getPartialRule,
+        keepPatterns,
       })
     } else if (options.compare) {
       await runSyncOrCompare(options.compare, {
@@ -1811,6 +1853,7 @@ program
         isIncluded,
         isExcluded,
         getPartialRule,
+        keepPatterns,
       })
     } else if (options.scan) {
       const result = await runScan(options.scan, allFiles)

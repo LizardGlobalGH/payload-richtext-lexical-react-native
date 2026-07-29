@@ -14,8 +14,9 @@
       "src/index.ts",
       "src/exports/client/index.ts",
       "src/exports/cssEntry.ts",
-      "src/exports/react-native/index.ts",
-      "src/exports/shared.ts"
+      "src/exports/react-native",
+      "src/exports/shared.ts",
+      "src/features/converters/lexicalToReactNative"
     ],
     "match": [
       "\\.(ts|tsx|mts|cts)$",
@@ -34,11 +35,13 @@
           "author",
           "maintainers",
           "scripts.upstream:deps",
+          "scripts.build:types",
           "exports[\"./react-native\"]",
           "peerDependencies.react-native",
           "peerDependenciesMeta.react-native",
           "peerDependencies.payload",
           "devDependencies.payload",
+          "peerDependencies.@payloadcms/next",
           "devDependencies.@payloadcms/eslint-config",
           "dependencies.@payloadcms/translations",
           "dependencies.@payloadcms/ui",
