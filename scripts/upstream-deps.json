@@ -28,7 +28,8 @@
           "devDependencies.payload",
           "devDependencies.@payloadcms/eslint-config",
           "dependencies.@payloadcms/translations",
-          "dependencies.@payloadcms/ui"
+          "dependencies.@payloadcms/ui",
+          "devDependencies.commander"
         ]
       }
     },
