@@ -6,9 +6,7 @@
 
 This package provides a React Native implementation of the Rich Text Renderer for serialized Lexical Editor content forked from `@payloadcms/richtext-lexical`. It includes components and utilities for rendering and managing rich text content in a React Native application.
 
-# Installation and Usage
-
-## Installation
+# Installation
 
 Install the package using your preferred package manager:
 
@@ -23,9 +21,10 @@ yarn add @lizardglobal/payload-richtext-lexical-react-native
 pnpm add @lizardglobal/payload-richtext-lexical-react-native
 ```
 
-### Internal Installation (Deprecated)
+## Internal install
 
-> **⚠️ Deprecation Warning:** Internal installation support will be removed in a future release. Please migrate to installing the package via npm, yarn, or pnpm as shown above.
+> [!WARNING]
+> Internal installation support will be removed in a future release. Please migrate to installing the package via npm, yarn, or pnpm as shown above.
 
 If you need to integrate this package internally without publishing, you can use the built-in CLI to build and copy `dist` into your local module path:
 
@@ -61,7 +60,7 @@ const MyComponent = () => {
 
 **Important:** Since this is a static build, there is no built-in package resolution. **Only use code paths to features you support.** For example, if you only support the React Native export, only import from `exports/react-native` and not from `exports/react` or `exports/client`. Importing from unsupported paths may cause errors due to missing dependencies.
 
-## Basic Usage
+# Usage
 
 The simplest way to render Lexical content is to use the `RichText` component with your serialized data:
 
@@ -75,7 +74,7 @@ function ArticleContent({ article }) {
 
 This will render the content using default React Native primitives (`View`, `Text`, `Image`, etc.) and built-in converters for all supported Lexical node types.
 
-## Handling External Links
+## Handling external links
 
 Since React Native doesn't have automatic link handling like web browsers, you should provide an `onExternalLinkPress` handler to control how external URLs are opened:
 
@@ -102,9 +101,9 @@ function ArticleContent({ article }) {
 }
 ```
 
-## Customizing Primitives
+## Primitives
 
-Primitives are the basic building blocks used to render content (e.g., `Text`, `View`, `Image`, `Pressable`). You can override these to integrate with your app's design system or add custom behavior:
+Primitives are the basic building blocks used to render content (e.g., `Text`, `View`, `Image`, `Pressable`). You can override these to integrate with your app's design system or add custom behavior. You only need to override the primitives you want to customize. Any primitives not specified will use the default React Native components:
 
 ```tsx
 import { RichText } from "@lizardglobal/payload-richtext-lexical/react-native";
@@ -126,21 +125,7 @@ function ArticleContent({ article }) {
 }
 ```
 
-**Why customize primitives?**
-- Apply consistent theming across your app
-- Add analytics tracking to interactive elements
-- Implement custom accessibility patterns
-- Integrate with your existing component library
-
-**Available primitives:**
-- `Text` - Text rendering
-- `View` - Container/layout elements
-- `Image` - Image rendering
-- `Pressable` - Interactive elements (links, buttons)
-
-You only need to override the primitives you want to customize. Any primitives not specified will use the default React Native components.
-
-## Customizing Converters
+## Converters
 
 Converters transform Lexical node types into React Native components. You can override default converters to change how specific content types are rendered:
 
@@ -212,14 +197,8 @@ function ArticleContent({ article }) {
 }
 ```
 
-**Common converter customization use cases:**
-- **Internal navigation:** Handle relationship links with app routing
-- **Styling:** Apply custom styles beyond what primitives provide
-- **Analytics:** Track when specific content types are rendered or interacted with
-- **Accessibility:** Add custom accessibility labels or behaviors
-- **Content transformation:** Modify or enhance content before rendering
-
-**Note:** When you override a converter, you're responsible for the complete rendering logic for that node type. Make sure to handle all relevant node properties and edge cases.
+> [!INFO]
+> When you override a converter, you're responsible for the complete rendering logic for that node type. Make sure to handle all relevant node properties and edge cases.
 
 # Implementation
 
