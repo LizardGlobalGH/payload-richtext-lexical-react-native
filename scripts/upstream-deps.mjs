@@ -9,6 +9,13 @@
  *   node scripts/upstream-deps.mjs <files-or-folders...> --sync <upstream>
  *   node scripts/upstream-deps.mjs <files-or-folders...> --compare <upstream>
  *   node scripts/upstream-deps.mjs <files-or-folders...> --scan <upstream>
+ *   node scripts/upstream-deps.mjs <files-or-folders...> --graph
+ *   node scripts/upstream-deps.mjs <files-or-folders...> --sync <upstream> --exclude src/foo --config ./upstream-deps.config.json
+ *
+ * Config file (JSON object):
+ *   {
+ *     "exclude": ["src/exports/react-native", "src/features/converters/lexicalToReactNative"]
+ *   }
  */
 
 import { Command } from 'commander'
@@ -427,6 +434,172 @@ function printDependencyReport(entryFiles, graph, allFiles, unresolved, { showGr
 }
 
 // ---------------------------------------------------------------------------
+// Exclusion list / config
+// ---------------------------------------------------------------------------
+
+function collectOption(value, previous) {
+  return previous.concat([value])
+}
+
+/**
+ * Normalize a user-provided path to a project-relative posix path.
+ */
+function normalizeExcludePattern(raw) {
+  let value = String(raw).trim()
+  if (!value) return null
+
+  // Strip trailing slashes except for root-style empties
+  value = value.replace(/\\/g, '/').replace(/\/+$/, '')
+
+  if (isAbsolute(value)) {
+    value = toPosix(relative(PROJECT_ROOT, value))
+  }
+
+  // Allow patterns that start with ./
+  if (value.startsWith('./')) {
+    value = value.slice(2)
+  }
+
+  if (!value || value.startsWith('..')) {
+    throw new Error(`Exclude path must be inside the project: ${raw}`)
+  }
+
+  return value
+}
+
+/**
+ * Build a matcher for exclude patterns (files or folders).
+ * A folder pattern matches the folder itself and every path under it.
+ */
+function createExclusionMatcher(patterns) {
+  const normalized = []
+  for (const pattern of patterns) {
+    const next = normalizeExcludePattern(pattern)
+    if (next) normalized.push(next)
+  }
+
+  // Deduplicate
+  const unique = [...new Set(normalized)].sort()
+
+  const isExcluded = (relPath) => {
+    const rel = toPosix(relPath).replace(/^\.\//, '')
+    for (const pattern of unique) {
+      if (rel === pattern || rel.startsWith(`${pattern}/`)) {
+        return true
+      }
+    }
+    return false
+  }
+
+  return { patterns: unique, isExcluded }
+}
+
+/**
+ * Load a JSON config file. Must be a plain object with keys.
+ * Supported keys:
+ *   - exclude: string[] — files/folders skipped during sync/compare
+ */
+async function loadConfigFile(configPath) {
+  const abs = isAbsolute(configPath) ? configPath : resolve(process.cwd(), configPath)
+
+  if (!(await fileExists(abs))) {
+    throw new Error(`Config file does not exist: ${configPath}`)
+  }
+
+  let parsed
+  try {
+    const raw = await readFile(abs, 'utf8')
+    parsed = JSON.parse(raw)
+  } catch (error) {
+    throw new Error(`Failed to read config file ${configPath}: ${error.message}`)
+  }
+
+  if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    throw new Error(`Config file must contain a JSON object with keys: ${configPath}`)
+  }
+
+  const knownKeys = new Set(['exclude'])
+  for (const key of Object.keys(parsed)) {
+    if (!knownKeys.has(key)) {
+      log.warn(`Unknown config key "${key}" in ${configPath} (ignored)`)
+    }
+  }
+
+  const exclude = parsed.exclude ?? []
+  if (!Array.isArray(exclude) || exclude.some((item) => typeof item !== 'string')) {
+    throw new Error(`Config key "exclude" must be an array of strings: ${configPath}`)
+  }
+
+  log.info(`Loaded config from ${abs}`)
+  log.debug(`Config keys: ${Object.keys(parsed).join(', ') || '(none)'}`)
+
+  return { exclude }
+}
+
+/**
+ * Merge CLI --exclude paths with config.exclude.
+ */
+async function resolveExclusions({ excludeFromCli = [], configPath }) {
+  /** @type {string[]} */
+  const fromConfig = []
+
+  if (configPath) {
+    const config = await loadConfigFile(configPath)
+    fromConfig.push(...config.exclude)
+  }
+
+  const merged = [...fromConfig, ...excludeFromCli]
+  const matcher = createExclusionMatcher(merged)
+
+  if (matcher.patterns.length > 0) {
+    log.info(`Exclusion list (${matcher.patterns.length}):`)
+    for (const pattern of matcher.patterns) {
+      log.info(`  - ${pattern}`)
+    }
+  } else {
+    log.debug('No exclusion patterns configured')
+  }
+
+  return matcher
+}
+
+/**
+ * Split a sync/compare diff into actionable vs excluded buckets.
+ */
+function partitionDiffByExclusion(diff, isExcluded) {
+  const split = (list) => {
+    const actionable = []
+    const excluded = []
+    for (const rel of list) {
+      if (isExcluded(rel)) excluded.push(rel)
+      else actionable.push(rel)
+    }
+    return { actionable, excluded }
+  }
+
+  const added = split(diff.added)
+  const modified = split(diff.modified)
+  const removed = split(diff.removed)
+  // Unchanged excluded files don't need warnings; keep them out of actionable noise
+  const unchanged = diff.unchanged.filter((rel) => !isExcluded(rel))
+
+  return {
+    actionable: {
+      added: added.actionable,
+      modified: modified.actionable,
+      removed: removed.actionable,
+      unchanged,
+    },
+    excluded: {
+      added: added.excluded,
+      modified: modified.excluded,
+      removed: removed.excluded,
+      unchanged: diff.unchanged.filter((rel) => isExcluded(rel)),
+    },
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Sync / compare
 // ---------------------------------------------------------------------------
 
@@ -536,13 +709,18 @@ async function diffTrees(sourceTree, destTree) {
   return { added, removed, modified, unchanged }
 }
 
-function printTreeDiff(diff, { dryRun }) {
+function printTreeDiff(diff, { dryRun, excludedDiff }) {
   const verb = dryRun ? 'Would' : 'Will'
   log.info(`${dryRun ? 'Compare' : 'Sync'} summary:`)
   log.info(`  added:     ${diff.added.length}`)
   log.info(`  modified:  ${diff.modified.length}`)
   log.info(`  removed:   ${diff.removed.length}`)
   log.info(`  unchanged: ${diff.unchanged.length}`)
+  if (excludedDiff) {
+    const skipped =
+      excludedDiff.added.length + excludedDiff.modified.length + excludedDiff.removed.length
+    log.info(`  excluded (skipped): ${skipped}`)
+  }
 
   for (const rel of diff.added) {
     log.info(`  + ${rel}  (${verb.toLowerCase()} copy)`)
@@ -552,6 +730,29 @@ function printTreeDiff(diff, { dryRun }) {
   }
   for (const rel of diff.removed) {
     log.info(`  - ${rel}  (${verb.toLowerCase()} remove)`)
+  }
+}
+
+/**
+ * Warn when excluded paths differ from upstream (would have been edited by sync).
+ */
+function warnExcludedEdits(excludedDiff, { dryRun }) {
+  const edited = [
+    ...excludedDiff.added.map((rel) => ({ rel, kind: 'added' })),
+    ...excludedDiff.modified.map((rel) => ({ rel, kind: 'modified' })),
+    ...excludedDiff.removed.map((rel) => ({ rel, kind: 'removed' })),
+  ]
+
+  if (edited.length === 0) {
+    log.debug('No excluded files differ from upstream')
+    return
+  }
+
+  const action = dryRun ? 'differ from upstream' : 'differ from upstream and were left untouched'
+  log.warn(`Excluded files ${action} (${edited.length}):`)
+  for (const { rel, kind } of edited) {
+    const marker = kind === 'added' ? '+' : kind === 'removed' ? '-' : '~'
+    log.warn(`  ${marker} ${rel}  (excluded, ${kind})`)
   }
 }
 
@@ -589,7 +790,7 @@ async function applySync(sourceTree, projectRoot, diff) {
   }
 }
 
-async function runSyncOrCompare(upstreamPath, { dryRun }) {
+async function runSyncOrCompare(upstreamPath, { dryRun, isExcluded }) {
   const upstream = await resolveUpstream(upstreamPath)
   log.info(`${dryRun ? 'Comparing' : 'Syncing'} from ${upstream}`)
   log.info(`Target project: ${PROJECT_ROOT}`)
@@ -600,19 +801,22 @@ async function runSyncOrCompare(upstreamPath, { dryRun }) {
   log.debug(`Upstream files: ${sourceTree.size}`)
   log.debug(`Managed project files: ${destTree.size}`)
 
-  const diff = await diffTrees(sourceTree, destTree)
-  printTreeDiff(diff, { dryRun })
+  const fullDiff = await diffTrees(sourceTree, destTree)
+  const { actionable, excluded } = partitionDiffByExclusion(fullDiff, isExcluded)
+
+  printTreeDiff(actionable, { dryRun, excludedDiff: excluded })
+  warnExcludedEdits(excluded, { dryRun })
 
   if (dryRun) {
     log.success('Compare complete (no files were changed)')
-    return diff
+    return { actionable, excluded }
   }
 
-  await applySync(sourceTree, PROJECT_ROOT, diff)
+  await applySync(sourceTree, PROJECT_ROOT, actionable)
   log.success(
-    `Sync complete (${diff.added.length} added, ${diff.modified.length} updated, ${diff.removed.length} removed)`,
+    `Sync complete (${actionable.added.length} added, ${actionable.modified.length} updated, ${actionable.removed.length} removed, ${excluded.added.length + excluded.modified.length + excluded.removed.length} excluded skipped)`,
   )
-  return diff
+  return { actionable, excluded }
 }
 
 // ---------------------------------------------------------------------------
@@ -706,6 +910,16 @@ program
     'check whether entry files or any of their local dependencies differ from upstream',
   )
   .option('--graph', 'print the full dependency graph (file → local imports)', false)
+  .option(
+    '--exclude <path>',
+    'file or folder to skip during sync/compare (repeatable; merges with config)',
+    collectOption,
+    [],
+  )
+  .option(
+    '-c, --config <path>',
+    'JSON config file path (object with keys; supports "exclude": string[])',
+  )
   .option('--debug', 'enable debug logging', false)
   .action(async (paths, options) => {
     log = createLogger(Boolean(options.debug))
@@ -717,6 +931,11 @@ program
 
     log.info(`Project root: ${PROJECT_ROOT}`)
     log.debug(`Entry paths: ${paths.join(', ')}`)
+
+    const { isExcluded } = await resolveExclusions({
+      excludeFromCli: options.exclude ?? [],
+      configPath: options.config,
+    })
 
     const entryFiles = await expandEntries(paths, process.cwd())
     if (entryFiles.length === 0) {
@@ -734,12 +953,12 @@ program
     })
 
     if (options.sync) {
-      await runSyncOrCompare(options.sync, { dryRun: false })
+      await runSyncOrCompare(options.sync, { dryRun: false, isExcluded })
       return
     }
 
     if (options.compare) {
-      await runSyncOrCompare(options.compare, { dryRun: true })
+      await runSyncOrCompare(options.compare, { dryRun: true, isExcluded })
       return
     }
 
