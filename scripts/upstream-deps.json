@@ -2,12 +2,26 @@
   "include": [
     "src",
     "package.json"
-],
-"exclude": [
+  ],
+  "exclude": [
     ".swcrc",
     "eslint.config.js",
     "README.md",
     "tsconfig.json"
+  ],
+  "keep": [
+    "src/index.ts",
+    "src/exports/client/index.ts",
+    "src/exports/cssEntry.ts",
+    "src/exports/html/index.ts",
+    "src/exports/html-async/index.ts",
+    "src/exports/plaintext/index.ts",
+    "src/exports/react/index.ts",
+    "src/exports/react-native/index.ts",
+    "src/exports/server/migrate.ts",
+    "src/exports/server/rsc.ts",
+    "src/exports/server/ast/mdx.ts",
+    "src/exports/shared.ts"
   ],
   "partial": {
     "package.json": {

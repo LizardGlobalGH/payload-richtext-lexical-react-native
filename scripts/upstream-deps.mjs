@@ -40,8 +40,9 @@
  *   }
  *
  * "include" (optional): when set, sync/compare only these files/folders.
- * "exclude": always skipped. "partial" wins over exclude for the same path.
- * CLI --include / --exclude fully override the corresponding config lists when provided.
+ * "exclude": always skipped during sync. "partial" wins over exclude for the same path.
+ * "keep": files/folders never removed by --clean (even if outside the dependency graph).
+ * CLI --include / --exclude / --keep fully override the corresponding config lists when provided.
  * For each partial file, use either keys (JSON) or lines (text), and either
  * include or exclude mode (not both). Nested JSON keys use dot paths; keys that
  * contain dots must use brackets, e.g. exports["./react-native"], or an array
@@ -877,6 +878,7 @@ async function applyPartialMerge(rel, sourceAbs, destAbs, rule) {
  * Supported keys:
  *   - include: string[] — when set, only these files/folders are synced/compared
  *   - exclude: string[] — files/folders skipped during sync/compare
+ *   - keep: string[] — files/folders never removed by --clean
  *   - partial: { [relativePath]: { keys|lines: { include|exclude: ... } } }
  */
 async function loadConfigFile(configPath) {
@@ -898,7 +900,7 @@ async function loadConfigFile(configPath) {
     throw new Error(`Config file must contain a JSON object with keys: ${configPath}`)
   }
 
-  const knownKeys = new Set(['include', 'exclude', 'partial'])
+  const knownKeys = new Set(['include', 'exclude', 'keep', 'partial'])
   for (const key of Object.keys(parsed)) {
     if (!knownKeys.has(key)) {
       log.warn(`Unknown config key "${key}" in ${configPath} (ignored)`)
@@ -913,6 +915,11 @@ async function loadConfigFile(configPath) {
   const exclude = parsed.exclude ?? []
   if (!Array.isArray(exclude) || exclude.some((item) => typeof item !== 'string')) {
     throw new Error(`Config key "exclude" must be an array of strings: ${configPath}`)
+  }
+
+  const keep = parsed.keep ?? []
+  if (!Array.isArray(keep) || keep.some((item) => typeof item !== 'string')) {
+    throw new Error(`Config key "keep" must be an array of strings: ${configPath}`)
   }
 
   /** @type {Map<string, ReturnType<typeof parsePartialRule>>} */
@@ -931,18 +938,25 @@ async function loadConfigFile(configPath) {
   log.info(`Loaded config from ${abs}`)
   log.debug(`Config keys: ${Object.keys(parsed).join(', ') || '(none)'}`)
 
-  return { include, exclude, partial }
+  return { include, exclude, keep, partial }
 }
 
 /**
- * Resolve CLI include/exclude with config.include / config.exclude / config.partial.
- * Non-empty CLI --include / --exclude lists fully replace the corresponding config lists.
+ * Resolve CLI include/exclude/keep with config lists / config.partial.
+ * Non-empty CLI lists fully replace the corresponding config lists.
  */
-async function resolveSyncConfig({ includeFromCli = [], excludeFromCli = [], configPath }) {
+async function resolveSyncConfig({
+  includeFromCli = [],
+  excludeFromCli = [],
+  keepFromCli = [],
+  configPath,
+}) {
   /** @type {string[]} */
   const includeFromConfig = []
   /** @type {string[]} */
   const excludeFromConfig = []
+  /** @type {string[]} */
+  const keepFromConfig = []
   /** @type {Map<string, ReturnType<typeof parsePartialRule>>} */
   let partial = new Map()
 
@@ -950,17 +964,22 @@ async function resolveSyncConfig({ includeFromCli = [], excludeFromCli = [], con
     const config = await loadConfigFile(configPath)
     includeFromConfig.push(...config.include)
     excludeFromConfig.push(...config.exclude)
+    keepFromConfig.push(...config.keep)
     partial = config.partial
   }
 
   const includePatterns = includeFromCli.length > 0 ? includeFromCli : includeFromConfig
   const excludePatterns = excludeFromCli.length > 0 ? excludeFromCli : excludeFromConfig
+  const keepPatterns = keepFromCli.length > 0 ? keepFromCli : keepFromConfig
 
   if (includeFromCli.length > 0 && includeFromConfig.length > 0) {
     log.info('CLI --include overrides config "include"')
   }
   if (excludeFromCli.length > 0 && excludeFromConfig.length > 0) {
     log.info('CLI --exclude overrides config "exclude"')
+  }
+  if (keepFromCli.length > 0 && keepFromConfig.length > 0) {
+    log.info('CLI --keep overrides config "keep"')
   }
 
   // Partial rules take precedence over full exclude for the same path
@@ -975,6 +994,7 @@ async function resolveSyncConfig({ includeFromCli = [], excludeFromCli = [], con
 
   const includeMatcher = createPathMatcher(includePatterns)
   const excludeMatcher = createPathMatcher(excludeFiltered)
+  const keepMatcher = createPathMatcher(keepPatterns)
 
   const includeEnabled = includeMatcher.patterns.length > 0
 
@@ -1007,6 +1027,15 @@ async function resolveSyncConfig({ includeFromCli = [], excludeFromCli = [], con
     log.debug('No exclusion patterns configured')
   }
 
+  if (keepMatcher.patterns.length > 0) {
+    log.info(`Clean keep list (${keepMatcher.patterns.length}) — never removed by --clean:`)
+    for (const pattern of keepMatcher.patterns) {
+      log.info(`  * ${pattern}`)
+    }
+  } else {
+    log.debug('No clean keep patterns configured')
+  }
+
   if (partial.size > 0) {
     log.info(`Partial update rules (${partial.size}):`)
     for (const [rel, rule] of [...partial.entries()].sort(([a], [b]) => a.localeCompare(b))) {
@@ -1030,6 +1059,7 @@ async function resolveSyncConfig({ includeFromCli = [], excludeFromCli = [], con
     isIncluded,
     matchesInclude: (relPath) => includeMatcher.matches(relPath),
     includePatterns: includeMatcher.patterns,
+    keepPatterns: keepMatcher.patterns,
     isExcluded,
     getPartialRule: (relPath) => {
       const rel = toPosix(relPath).replace(/^\.\//, '')
@@ -1463,14 +1493,14 @@ async function runScan(upstreamPath, allFiles) {
 // ---------------------------------------------------------------------------
 
 /**
- * Remove files under `cleanRoot` that are neither in the dependency graph
- * nor matched by the include list. Empty directories are removed afterward
+ * Remove files under `cleanRoot` that are not in the dependency graph,
+ * not matched by include (except patterns covering the clean root), and not
+ * matched by the keep list. Keep file entries are expanded through their
+ * local dependency graphs so listing an export entry is enough to preserve
+ * what it needs to build. Empty directories are removed afterward
  * (the clean root itself is kept).
- *
- * Include patterns that equal or contain the clean root are ignored for keep
- * decisions (otherwise `--clean src` with `include: ["src"]` would keep everything).
  */
-async function runClean(cleanRootArg, { allFiles, includePatterns }) {
+async function runClean(cleanRootArg, { allFiles, includePatterns, keepPatterns }) {
   const cleanRoot = isAbsolute(cleanRootArg)
     ? cleanRootArg
     : resolve(PROJECT_ROOT, cleanRootArg)
@@ -1510,8 +1540,38 @@ async function runClean(cleanRootArg, { allFiles, includePatterns }) {
     )
   }
 
+  // Split keep patterns: existing files → expand deps; folders/globs → path matcher
+  const keepFileEntries = []
+  const keepFolderPatterns = []
+  for (const pattern of keepPatterns ?? []) {
+    const abs = join(PROJECT_ROOT, pattern)
+    try {
+      const s = await stat(abs)
+      if (s.isFile()) {
+        keepFileEntries.push(abs)
+        continue
+      }
+    } catch {
+      // missing path — still treat as folder/prefix pattern
+    }
+    keepFolderPatterns.push(pattern)
+  }
+
+  if (keepFileEntries.length > 0) {
+    log.info(
+      `Expanding dependency graph for ${keepFileEntries.length} keep file(s)`,
+    )
+    const { allFiles: keepDeps } = await buildDependencyGraph(keepFileEntries)
+    for (const abs of keepDeps) {
+      graphKeep.add(toPosix(relative(PROJECT_ROOT, abs)))
+    }
+    log.info(`  keep graph size: ${keepDeps.length}`)
+  }
+
   const keepIncludeMatcher = createPathMatcher(keepIncludePatterns)
-  const shouldKeep = (rel) => graphKeep.has(rel) || keepIncludeMatcher.matches(rel)
+  const cleanKeepMatcher = createPathMatcher(keepFolderPatterns)
+  const shouldKeep = (rel) =>
+    graphKeep.has(rel) || keepIncludeMatcher.matches(rel) || cleanKeepMatcher.matches(rel)
 
   const files = await collectFiles(cleanRoot)
   const toRemove = []
@@ -1611,8 +1671,14 @@ program
     [],
   )
   .option(
+    '--keep <path>',
+    'file or folder never removed by --clean (repeatable; overrides config "keep" when set)',
+    collectOption,
+    [],
+  )
+  .option(
     '-c, --config <path>',
-    'JSON config file path (object with keys; supports "include", "exclude", and "partial")',
+    'JSON config file path (object with keys; supports "include", "exclude", "keep", and "partial")',
   )
   .option(
     '--clean [path]',
@@ -1634,10 +1700,11 @@ program
     log.info(`Project root: ${PROJECT_ROOT}`)
     log.debug(`Entry paths: ${paths.join(', ')}`)
 
-    const { isIncluded, isExcluded, getPartialRule, includePatterns } =
+    const { isIncluded, isExcluded, getPartialRule, includePatterns, keepPatterns } =
       await resolveSyncConfig({
         includeFromCli: options.include ?? [],
         excludeFromCli: options.exclude ?? [],
+        keepFromCli: options.keep ?? [],
         configPath: options.config,
       })
 
@@ -1685,6 +1752,7 @@ program
       await runClean(cleanPath, {
         allFiles,
         includePatterns,
+        keepPatterns,
       })
     }
   })
