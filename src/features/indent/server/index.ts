@@ -23,7 +23,7 @@ export const IndentFeature = createServerFeature<
 >({
   feature: ({ props }) => {
     return {
-      ClientFeature: '@lizardglobal/payload-richtext-lexical-react-native/client#IndentFeatureClient',
+      ClientFeature: '@payloadcms/richtext-lexical/client#IndentFeatureClient',
       clientFeatureProps: props,
       i18n,
     }

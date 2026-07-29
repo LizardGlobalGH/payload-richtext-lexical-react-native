@@ -1,10 +1,10 @@
 import type {
-    CollectionSlug,
-    Config,
-    Field,
-    FieldAffectingData,
-    FieldSchemaMap,
-    SanitizedConfig,
+  CollectionSlug,
+  Config,
+  Field,
+  FieldAffectingData,
+  FieldSchemaMap,
+  SanitizedConfig,
 } from 'payload'
 
 import escapeHTML from 'escape-html'
@@ -137,7 +137,7 @@ export const LinkFeature = createServerFeature<
       : undefined
 
     return {
-      ClientFeature: '@lizardglobal/payload-richtext-lexical-react-native/client#LinkFeatureClient',
+      ClientFeature: '@payloadcms/richtext-lexical/client#LinkFeatureClient',
       clientFeatureProps: {
         defaultLinkType,
         defaultLinkURL,

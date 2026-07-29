@@ -3,7 +3,7 @@ import { STRIKETHROUGH } from './markdownTransformers.js'
 
 export const StrikethroughFeature = createServerFeature({
   feature: {
-    ClientFeature: '@lizardglobal/payload-richtext-lexical-react-native/client#StrikethroughFeatureClient',
+    ClientFeature: '@payloadcms/richtext-lexical/client#StrikethroughFeatureClient',
 
     markdownTransformers: [STRIKETHROUGH],
   },

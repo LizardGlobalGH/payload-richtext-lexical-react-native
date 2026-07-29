@@ -3,13 +3,14 @@ import type { JSONSchema4 } from 'json-schema'
 import type { SerializedEditorState, SerializedLexicalNode } from 'lexical'
 
 import {
-    afterChangeTraverseFields,
-    afterReadTraverseFields,
-    beforeChangeTraverseFields,
-    beforeValidateTraverseFields,
-    checkDependencies,
-    deepMergeSimple,
-    withNullableJSONSchemaType
+  afterChangeTraverseFields,
+  afterReadTraverseFields,
+  beforeChangeTraverseFields,
+  beforeValidateTraverseFields,
+  checkDependencies,
+  deepMergeSimple,
+  type RichTextAdapter,
+  withNullableJSONSchemaType,
 } from 'payload'
 
 import type { FeatureProviderServer, ResolvedServerFeatureMap } from './features/typesServer.js'
@@ -96,12 +97,12 @@ export function lexicalEditor(args?: LexicalEditorProps): LexicalRichTextAdapter
     config.i18n.translations = deepMergeSimple(config.i18n.translations, featureI18n)
 
     return {
-      CellComponent: '@lizardglobal/payload-richtext-lexical-react-native/rsc#RscEntryLexicalCell',
-      DiffComponent: '@lizardglobal/payload-richtext-lexical-react-native/rsc#LexicalDiffComponent',
+      CellComponent: '@payloadcms/richtext-lexical/rsc#RscEntryLexicalCell',
+      DiffComponent: '@payloadcms/richtext-lexical/rsc#LexicalDiffComponent',
       editorConfig: finalSanitizedEditorConfig,
       features,
       FieldComponent: {
-        path: '@lizardglobal/payload-richtext-lexical-react-native/rsc#RscEntryLexicalField',
+        path: '@payloadcms/richtext-lexical/rsc#RscEntryLexicalField',
         serverProps: {
           admin: args?.admin,
           // SanitizedEditorConfig is manually passed by `renderField` in `fieldSchemasToFormState/renderField.tsx`
@@ -866,25 +867,29 @@ export { BlockquoteFeature } from './features/blockquote/server/index.js'
 export { CodeBlock } from './features/blocks/premade/CodeBlock/index.js'
 export { BlocksFeature } from './features/blocks/server/index.js'
 export type {
-    BlocksFeatureProps,
-    LexicalBlockClientProps,
-    LexicalBlockLabelClientProps,
-    LexicalBlockLabelServerProps,
-    LexicalBlockServerProps,
-    LexicalInlineBlockClientProps,
-    LexicalInlineBlockLabelClientProps,
-    LexicalInlineBlockLabelServerProps,
-    LexicalInlineBlockServerProps
+  BlocksFeatureProps,
+  LexicalBlockClientProps,
+  LexicalBlockLabelClientProps,
+  LexicalBlockLabelServerProps,
+  LexicalBlockServerProps,
+  LexicalInlineBlockClientProps,
+  LexicalInlineBlockLabelClientProps,
+  LexicalInlineBlockLabelServerProps,
+  LexicalInlineBlockServerProps,
 } from './features/blocks/server/index.js'
 
 export {
-    $createServerBlockNode,
-    $isServerBlockNode, ServerBlockNode, type BlockFields
+  $createServerBlockNode,
+  $isServerBlockNode,
+  type BlockFields,
+  ServerBlockNode,
 } from './features/blocks/server/nodes/BlocksNode.js'
 
 export {
-    $createServerInlineBlockNode,
-    $isServerInlineBlockNode, ServerInlineBlockNode, type InlineBlockFields
+  $createServerInlineBlockNode,
+  $isServerInlineBlockNode,
+  type InlineBlockFields,
+  ServerInlineBlockNode,
 } from './features/blocks/server/nodes/InlineBlocksNode.js'
 
 export { convertHTMLToLexical } from './features/converters/htmlToLexical/index.js'
@@ -899,17 +904,17 @@ export { TextHTMLConverter } from './features/converters/lexicalToHtml_deprecate
 export { defaultHTMLConverters } from './features/converters/lexicalToHtml_deprecated/converter/defaultConverters.js'
 
 export {
-    convertLexicalNodesToHTML,
-    convertLexicalToHTML
+  convertLexicalNodesToHTML,
+  convertLexicalToHTML,
 } from './features/converters/lexicalToHtml_deprecated/converter/index.js'
 export type { HTMLConverter } from './features/converters/lexicalToHtml_deprecated/converter/types.js'
 export {
-    consolidateHTMLConverters,
-    lexicalHTML
+  consolidateHTMLConverters,
+  lexicalHTML,
 } from './features/converters/lexicalToHtml_deprecated/field/index.js'
 export {
-    HTMLConverterFeature,
-    type HTMLConverterFeatureProps
+  HTMLConverterFeature,
+  type HTMLConverterFeatureProps,
 } from './features/converters/lexicalToHtml_deprecated/index.js'
 export { convertLexicalToMarkdown } from './features/converters/lexicalToMarkdown/index.js'
 export { convertMarkdownToLexical } from './features/converters/markdownToLexical/index.js'
@@ -933,9 +938,9 @@ export { HorizontalRuleFeature } from './features/horizontalRule/server/index.js
 
 export { IndentFeature } from './features/indent/server/index.js'
 export {
-    $createAutoLinkNode,
-    $isAutoLinkNode,
-    AutoLinkNode
+  $createAutoLinkNode,
+  $isAutoLinkNode,
+  AutoLinkNode,
 } from './features/link/nodes/AutoLinkNode.js'
 export { $createLinkNode, $isLinkNode, LinkNode } from './features/link/nodes/LinkNode.js'
 
@@ -947,18 +952,19 @@ export { OrderedListFeature } from './features/lists/orderedList/server/index.js
 
 export { UnorderedListFeature } from './features/lists/unorderedList/server/index.js'
 export type {
-    SlateNode,
-    SlateNodeConverter
+  SlateNode,
+  SlateNodeConverter,
 } from './features/migrations/slateToLexical/converter/types.js'
 export { ParagraphFeature } from './features/paragraph/server/index.js'
 
 export {
-    RelationshipFeature,
-    type RelationshipFeatureProps
+  RelationshipFeature,
+  type RelationshipFeatureProps,
 } from './features/relationship/server/index.js'
 
 export {
-    RelationshipServerNode, type RelationshipData
+  type RelationshipData,
+  RelationshipServerNode,
 } from './features/relationship/server/nodes/RelationshipNode.js'
 export { defaultColors } from './features/textState/defaultColors.js'
 export { TextStateFeature } from './features/textState/feature.server.js'
@@ -968,87 +974,87 @@ export { FixedToolbarFeature } from './features/toolbars/fixed/server/index.js'
 export { InlineToolbarFeature } from './features/toolbars/inline/server/index.js'
 export type { ToolbarGroup, ToolbarGroupItem } from './features/toolbars/types.js'
 export type {
-    BaseClientFeatureProps,
-    ClientFeature,
-    ClientFeatureProviderMap,
-    FeatureProviderClient,
-    FeatureProviderProviderClient,
-    PluginComponent,
-    PluginComponentWithAnchor,
-    ResolvedClientFeature,
-    ResolvedClientFeatureMap,
-    SanitizedClientFeatures,
-    SanitizedPlugin
+  BaseClientFeatureProps,
+  ClientFeature,
+  ClientFeatureProviderMap,
+  FeatureProviderClient,
+  FeatureProviderProviderClient,
+  PluginComponent,
+  PluginComponentWithAnchor,
+  ResolvedClientFeature,
+  ResolvedClientFeatureMap,
+  SanitizedClientFeatures,
+  SanitizedPlugin,
 } from './features/typesClient.js'
 
 export type {
-    AfterChangeNodeHook,
-    AfterChangeNodeHookArgs,
-    AfterReadNodeHook,
-    AfterReadNodeHookArgs,
-    BaseNodeHookArgs,
-    BeforeChangeNodeHook,
-    BeforeChangeNodeHookArgs,
-    BeforeValidateNodeHook,
-    BeforeValidateNodeHookArgs,
-    FeatureProviderProviderServer,
-    FeatureProviderServer,
-    NodeValidation,
-    NodeWithHooks,
-    PopulationPromise,
-    ResolvedServerFeature,
-    ResolvedServerFeatureMap,
-    SanitizedServerFeatures,
-    ServerFeature,
-    ServerFeatureProviderMap
+  AfterChangeNodeHook,
+  AfterChangeNodeHookArgs,
+  AfterReadNodeHook,
+  AfterReadNodeHookArgs,
+  BaseNodeHookArgs,
+  BeforeChangeNodeHook,
+  BeforeChangeNodeHookArgs,
+  BeforeValidateNodeHook,
+  BeforeValidateNodeHookArgs,
+  FeatureProviderProviderServer,
+  FeatureProviderServer,
+  NodeValidation,
+  NodeWithHooks,
+  PopulationPromise,
+  ResolvedServerFeature,
+  ResolvedServerFeatureMap,
+  SanitizedServerFeatures,
+  ServerFeature,
+  ServerFeatureProviderMap,
 } from './features/typesServer.js'
 
-export { createNode } from './features/typeUtilities.js'; // Only useful in feature.server.ts
+export { createNode } from './features/typeUtilities.js' // Only useful in feature.server.ts
 
 export { UploadFeature } from './features/upload/server/index.js'
 export type { UploadFeatureProps } from './features/upload/server/index.js'
 
-export { UploadServerNode, type UploadData } from './features/upload/server/nodes/UploadNode.js'
+export { type UploadData, UploadServerNode } from './features/upload/server/nodes/UploadNode.js'
 export type { EditorConfigContextType } from './lexical/config/client/EditorConfigProvider.js'
 
 export {
-    defaultEditorConfig,
-    defaultEditorFeatures,
-    defaultEditorLexicalConfig
+  defaultEditorConfig,
+  defaultEditorFeatures,
+  defaultEditorLexicalConfig,
 } from './lexical/config/server/default.js'
 export { loadFeatures, sortFeaturesForOptimalLoading } from './lexical/config/server/loader.js'
 
 export {
-    sanitizeServerEditorConfig,
-    sanitizeServerFeatures
+  sanitizeServerEditorConfig,
+  sanitizeServerFeatures,
 } from './lexical/config/server/sanitize.js'
 export type {
-    ClientEditorConfig,
-    SanitizedClientEditorConfig,
-    SanitizedServerEditorConfig,
-    ServerEditorConfig
+  ClientEditorConfig,
+  SanitizedClientEditorConfig,
+  SanitizedServerEditorConfig,
+  ServerEditorConfig,
 } from './lexical/config/types.js'
 export type { AdapterProps }
 
 export { getEnabledNodes, getEnabledNodesFromServerNodes } from './lexical/nodes/index.js'
 
 export type {
-    SlashMenuGroup,
-    SlashMenuItem
+  SlashMenuGroup,
+  SlashMenuItem,
 } from './lexical/plugins/SlashMenu/LexicalTypeaheadMenuPlugin/types.js'
 export {
-    DETAIL_TYPE_TO_DETAIL,
-    DOUBLE_LINE_BREAK,
-    ELEMENT_FORMAT_TO_TYPE,
-    ELEMENT_TYPE_TO_FORMAT,
-    IS_ALL_FORMATTING,
-    LTR_REGEX,
-    NodeFormat,
-    NON_BREAKING_SPACE,
-    RTL_REGEX,
-    TEXT_MODE_TO_TYPE,
-    TEXT_TYPE_TO_FORMAT,
-    TEXT_TYPE_TO_MODE
+  DETAIL_TYPE_TO_DETAIL,
+  DOUBLE_LINE_BREAK,
+  ELEMENT_FORMAT_TO_TYPE,
+  ELEMENT_TYPE_TO_FORMAT,
+  IS_ALL_FORMATTING,
+  LTR_REGEX,
+  NodeFormat,
+  NON_BREAKING_SPACE,
+  RTL_REGEX,
+  TEXT_MODE_TO_TYPE,
+  TEXT_TYPE_TO_FORMAT,
+  TEXT_TYPE_TO_MODE,
 } from './lexical/utils/nodeFormat.js'
 
 export { sanitizeUrl, validateUrl } from './lexical/utils/url.js'
@@ -1070,10 +1076,9 @@ export type { FieldsDrawerProps } from './utilities/fieldsDrawer/Drawer.js'
 export { extractPropsFromJSXPropsString } from './utilities/jsx/extractPropsFromJSXPropsString.js'
 
 export {
-    extractFrontmatter,
-    frontmatterToObject,
-    objectToFrontmatter,
-    propsToJSXString
+  extractFrontmatter,
+  frontmatterToObject,
+  objectToFrontmatter,
+  propsToJSXString,
 } from './utilities/jsx/jsx.js'
 export { upgradeLexicalData } from './utilities/upgradeLexicalData/index.js'
-

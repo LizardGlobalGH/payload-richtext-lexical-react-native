@@ -1,7 +1,7 @@
 import type {
-    SerializedTableCellNode as _SerializedTableCellNode,
-    SerializedTableNode as _SerializedTableNode,
-    SerializedTableRowNode as _SerializedTableRowNode,
+  SerializedTableCellNode as _SerializedTableCellNode,
+  SerializedTableNode as _SerializedTableNode,
+  SerializedTableRowNode as _SerializedTableRowNode,
 } from '@lexical/table'
 import type { SerializedLexicalNode } from 'lexical'
 import type { Config, Field, FieldSchemaMap } from 'payload'
@@ -51,7 +51,7 @@ export const EXPERIMENTAL_TableFeature = createServerFeature({
       validRelationships,
     })
     return {
-      ClientFeature: '@lizardglobal/payload-richtext-lexical-react-native/client#TableFeatureClient',
+      ClientFeature: '@payloadcms/richtext-lexical/client#TableFeatureClient',
       generateSchemaMap: () => {
         const schemaMap: FieldSchemaMap = new Map()
 

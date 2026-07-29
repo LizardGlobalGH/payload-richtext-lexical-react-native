@@ -48,7 +48,7 @@ export const RelationshipFeature = createServerFeature<
     // we don't need to pass maxDepth to the client, it's only used on the server
     const { maxDepth, ...clientFeatureProps } = props ?? {}
     return {
-      ClientFeature: '@lizardglobal/payload-richtext-lexical-react-native/client#RelationshipFeatureClient',
+      ClientFeature: '@payloadcms/richtext-lexical/client#RelationshipFeatureClient',
       clientFeatureProps,
       i18n,
       nodes: [

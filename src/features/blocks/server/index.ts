@@ -1,12 +1,12 @@
 import type {
-    Block,
-    BlocksField,
-    BlockSlug,
-    Config,
-    FieldSchemaMap,
-    FlattenedBlocksField,
-    UIFieldClientProps,
-    UIFieldServerProps,
+  Block,
+  BlocksField,
+  BlockSlug,
+  Config,
+  FieldSchemaMap,
+  FlattenedBlocksField,
+  UIFieldClientProps,
+  UIFieldServerProps,
 } from 'payload'
 
 import { fieldsToJSONSchema, flattenAllFields, sanitizeFields } from 'payload'
@@ -86,7 +86,7 @@ export const BlocksFeature = createServerFeature<BlocksFeatureProps, BlocksFeatu
     }
 
     return {
-      ClientFeature: '@lizardglobal/payload-richtext-lexical-react-native/client#BlocksFeatureClient',
+      ClientFeature: '@payloadcms/richtext-lexical/client#BlocksFeatureClient',
       generatedTypes: {
         modifyOutputSchema: ({
           collectionIDFieldTypes,
