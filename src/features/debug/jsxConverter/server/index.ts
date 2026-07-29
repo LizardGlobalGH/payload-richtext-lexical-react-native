@@ -2,7 +2,7 @@ import { createServerFeature } from '../../../../utilities/createServerFeature.j
 
 export const DebugJsxConverterFeature = createServerFeature({
   feature: {
-    ClientFeature: '@payloadcms/richtext-lexical/client#DebugJsxConverterFeatureClient',
+    ClientFeature: '@lizardglobal/payload-richtext-lexical-react-native/client#DebugJsxConverterFeatureClient',
   },
   key: 'jsxConverter',
 })

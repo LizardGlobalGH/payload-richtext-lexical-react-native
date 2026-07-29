@@ -16,7 +16,7 @@ export type SerializedQuoteNode<T extends SerializedLexicalNode = SerializedLexi
 
 export const BlockquoteFeature = createServerFeature({
   feature: {
-    ClientFeature: '@payloadcms/richtext-lexical/client#BlockquoteFeatureClient',
+    ClientFeature: '@lizardglobal/payload-richtext-lexical-react-native/client#BlockquoteFeatureClient',
     clientFeatureProps: null,
     i18n,
     markdownTransformers: [MarkdownTransformer],

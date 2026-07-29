@@ -2,7 +2,7 @@ import { createServerFeature } from '../../../../utilities/createServerFeature.j
 
 export const TestRecorderFeature = createServerFeature({
   feature: {
-    ClientFeature: '@payloadcms/richtext-lexical/client#TestRecorderFeatureClient',
+    ClientFeature: '@lizardglobal/payload-richtext-lexical-react-native/client#TestRecorderFeatureClient',
   },
   key: 'testRecorder',
 })

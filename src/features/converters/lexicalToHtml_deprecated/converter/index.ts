@@ -48,13 +48,13 @@ export type ConvertLexicalToHTMLArgs = {
 )
 
 /**
- * @deprecated - will be removed in 4.0. Use the function exported from `@payloadcms/richtext-lexical/html` instead.
+ * @deprecated - will be removed in 4.0. Use the function exported from `@lizardglobal/payload-richtext-lexical-react-native/html` instead.
  * @example
  * ```ts
  * // old (deprecated)
- * import { convertLexicalToHTML } from '@payloadcms/richtext-lexical'
+ * import { convertLexicalToHTML } from '@lizardglobal/payload-richtext-lexical-react-native'
  * // new (recommended)
- * import { convertLexicalToHTML } from '@payloadcms/richtext-lexical/html'
+ * import { convertLexicalToHTML } from '@lizardglobal/payload-richtext-lexical-react-native/html'
  * ```
  * For more details, you can refer to https://payloadcms.com/docs/rich-text/converting-html to see all the
  * ways to convert lexical to HTML.

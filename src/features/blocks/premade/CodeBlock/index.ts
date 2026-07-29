@@ -25,10 +25,10 @@ export const CodeBlock: (
             // If default languages are used, return undefined (=> do not pass `languages` variable) in order to reduce data sent to the client
             languages: args?.languages,
           },
-          path: '@payloadcms/richtext-lexical/client#CodeBlockBlockComponent',
+          path: '@lizardglobal/payload-richtext-lexical-react-native/client#CodeBlockBlockComponent',
         },
       },
-      jsx: '@payloadcms/richtext-lexical/client#codeConverterClient',
+      jsx: '@lizardglobal/payload-richtext-lexical-react-native/client#codeConverterClient',
     },
     fields: [
       {
@@ -51,7 +51,7 @@ export const CodeBlock: (
           components: {
             Field: {
               clientProps: args,
-              path: '@payloadcms/richtext-lexical/client#CodeComponent',
+              path: '@lizardglobal/payload-richtext-lexical-react-native/client#CodeComponent',
             },
           },
         },

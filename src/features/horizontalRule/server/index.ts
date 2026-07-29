@@ -6,7 +6,7 @@ import { HorizontalRuleServerNode } from './nodes/HorizontalRuleNode.js'
 
 export const HorizontalRuleFeature = createServerFeature({
   feature: {
-    ClientFeature: '@payloadcms/richtext-lexical/client#HorizontalRuleFeatureClient',
+    ClientFeature: '@lizardglobal/payload-richtext-lexical-react-native/client#HorizontalRuleFeatureClient',
     i18n,
     markdownTransformers: [MarkdownTransformer],
     nodes: [

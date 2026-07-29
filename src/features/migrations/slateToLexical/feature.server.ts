@@ -64,7 +64,7 @@ export const SlateToLexicalFeature = createServerFeature<
     props.converters = converters
 
     return {
-      ClientFeature: '@payloadcms/richtext-lexical/client#SlateToLexicalFeatureClient',
+      ClientFeature: '@lizardglobal/payload-richtext-lexical-react-native/client#SlateToLexicalFeatureClient',
       hooks: props.disableHooks
         ? undefined
         : {

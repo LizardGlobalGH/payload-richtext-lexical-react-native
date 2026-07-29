@@ -2,7 +2,7 @@ import { createServerFeature } from '../../../../utilities/createServerFeature.j
 
 export const InlineToolbarFeature = createServerFeature({
   feature: {
-    ClientFeature: '@payloadcms/richtext-lexical/client#InlineToolbarFeatureClient',
+    ClientFeature: '@lizardglobal/payload-richtext-lexical-react-native/client#InlineToolbarFeatureClient',
   },
   key: 'toolbarInline',
 })

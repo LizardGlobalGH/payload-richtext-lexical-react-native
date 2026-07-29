@@ -36,7 +36,7 @@ export const HeadingFeature = createServerFeature<
     enabledHeadingSizes.sort()
 
     return {
-      ClientFeature: '@payloadcms/richtext-lexical/client#HeadingFeatureClient',
+      ClientFeature: '@lizardglobal/payload-richtext-lexical-react-native/client#HeadingFeatureClient',
       clientFeatureProps: props,
       i18n,
       markdownTransformers: [MarkdownTransformer(enabledHeadingSizes)],

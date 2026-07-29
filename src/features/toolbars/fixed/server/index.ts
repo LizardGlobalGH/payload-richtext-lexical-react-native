@@ -45,7 +45,7 @@ export const FixedToolbarFeature = createServerFeature<
     }
 
     return {
-      ClientFeature: '@payloadcms/richtext-lexical/client#FixedToolbarFeatureClient',
+      ClientFeature: '@lizardglobal/payload-richtext-lexical-react-native/client#FixedToolbarFeatureClient',
       clientFeatureProps: sanitizedProps,
       sanitizedServerFeatureProps: sanitizedProps,
     }

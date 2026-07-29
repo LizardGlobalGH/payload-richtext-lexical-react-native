@@ -2,7 +2,7 @@ import { createServerFeature } from '../../../../utilities/createServerFeature.j
 
 export const TreeViewFeature = createServerFeature({
   feature: {
-    ClientFeature: '@payloadcms/richtext-lexical/client#TreeViewFeatureClient',
+    ClientFeature: '@lizardglobal/payload-richtext-lexical-react-native/client#TreeViewFeatureClient',
   },
   key: 'treeView',
 })

@@ -37,7 +37,7 @@ export const LexicalPluginToLexicalFeature =
       props.converters = converters
 
       return {
-        ClientFeature: '@payloadcms/richtext-lexical/client#LexicalPluginToLexicalFeatureClient',
+        ClientFeature: '@lizardglobal/payload-richtext-lexical-react-native/client#LexicalPluginToLexicalFeatureClient',
         hooks: props.disableHooks
           ? undefined
           : {

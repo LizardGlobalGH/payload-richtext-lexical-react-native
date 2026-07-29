@@ -1,6 +1,6 @@
-> [!] This package is an extracted fork of the `@payloadcms/richtext-lexical` package.
+> [!] This package is an extracted fork of the `@lizardglobal/payload-richtext-lexical-react-native` package.
 
-This package provides a React Native implementation of the Rich Text Renderer for serialized Lexical Editor content forked from `@payloadcms/richtext-lexical`. It includes components and utilities for rendering and managing rich text content in a React Native application.
+This package provides a React Native implementation of the Rich Text Renderer for serialized Lexical Editor content forked from `@lizardglobal/payload-richtext-lexical-react-native`. It includes components and utilities for rendering and managing rich text content in a React Native application.
 
 # Integration
 
@@ -59,7 +59,7 @@ This package is compartimentalized, meaning that you can choose to only use the 
 
 > *The following sections provide an overview of the technical rationale behind the implementation, the public API, expected usage flow, edge cases and concerns, and questions for maintainers. This is intended to give maintainers a comprehensive understanding of the implementation decisions and trade-offs made in this renderer.*
 
-This implementation adds **React Native rendering support** to the `@payloadcms/richtext-lexical` package by adding a similar entry point `@payloadcms/richtext-lexical/react-native` as the existing renderers (and specifically the React renderer) but with RN primitives.
+This implementation adds **React Native rendering support** to the `@lizardglobal/payload-richtext-lexical-react-native` package by adding a similar entry point `@lizardglobal/payload-richtext-lexical-react-native/react-native` as the existing renderers (and specifically the React renderer) but with RN primitives.
 
 > **Note:** This is my first contribution, so I would really appreciate feedback on both implementation decisions and documentation quality! I used the existing React renderer implementation as the base and inspiration for this RN renderer. If any direction here is not aligned with contribution expectations, I would appreciate pointers on the preferred approach!
 
@@ -88,7 +88,7 @@ To align with the API exposed by the React renderer, I've tried to mimic the sam
 The expected integration flow is kept similarly aligned with the React renderer. Data fetching is left to the user, and the package focuses on rendering serialized Lexical content via the `RichText` component. Developers can optionally provide `primitives` and `converters` overrides for customization, but the default set should cover most use cases. They can also define an `onExternalLinkPress` handler to manage external URL behavior explicitly, which is important in RN where URL handling can vary by environment. By default, external links will attempt to open using `Linking.openURL`, but providing an explicit handler allows for more control and consistency across platforms. **So, to recap:**
 
 1. Users fetch serialized Lexical data from Payload.
-2. Render it with `RichText` from `@payloadcms/richtext-lexical/react-native`.
+2. Render it with `RichText` from `@lizardglobal/payload-richtext-lexical-react-native/react-native`.
 3. Provide `onExternalLinkPress` for explicit external URL behavior.
 4. Add `primitives` overrides when integrating with an app design system.
 5. Add `converters` overrides when default node behavior is insufficient.

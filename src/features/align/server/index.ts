@@ -3,7 +3,7 @@ import { i18n } from './i18n.js'
 
 export const AlignFeature = createServerFeature({
   feature: {
-    ClientFeature: '@payloadcms/richtext-lexical/client#AlignFeatureClient',
+    ClientFeature: '@lizardglobal/payload-richtext-lexical-react-native/client#AlignFeatureClient',
     i18n,
   },
   key: 'align',

@@ -1,5 +1,5 @@
 {
-  "name": "@payloadcms/richtext-lexical",
+  "name": "@lizardglobal/payload-richtext-lexical-react-native",
   "version": "3.80.0",
   "description": "The officially supported Lexical richtext adapter for Payload",
   "homepage": "https://payloadcms.com",
