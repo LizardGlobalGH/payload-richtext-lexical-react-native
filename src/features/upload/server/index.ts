@@ -1,12 +1,12 @@
 import type {
-    Config,
-    Field,
-    FieldSchemaMap,
-    FileData,
-    FileSizeImproved,
-    Payload,
-    TypeWithID,
-    UploadCollectionSlug,
+  Config,
+  Field,
+  FieldSchemaMap,
+  FileData,
+  FileSizeImproved,
+  Payload,
+  TypeWithID,
+  UploadCollectionSlug,
 } from 'payload'
 
 import { sanitizeFields } from 'payload'
@@ -110,7 +110,7 @@ export const UploadFeature = createServerFeature<
     }
 
     return {
-      ClientFeature: '@lizardglobal/payload-richtext-lexical-react-native/client#UploadFeatureClient',
+      ClientFeature: '@payloadcms/richtext-lexical/client#UploadFeatureClient',
       clientFeatureProps: clientProps,
       generateSchemaMap: ({ props }) => {
         if (!props?.collections) {

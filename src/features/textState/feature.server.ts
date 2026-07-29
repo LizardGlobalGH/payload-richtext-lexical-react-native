@@ -27,7 +27,7 @@ export type TextStateFeatureProps = {
    *
    *
    * @example
-   * import { defaultColors } from '@lizardglobal/payload-richtext-lexical-react-native'
+   * import { defaultColors } from '@payloadcms/richtext-lexical'
    *
    * state: {
    *   color: {
@@ -68,7 +68,7 @@ export const TextStateFeature = createServerFeature<
 >({
   feature: ({ props }) => {
     return {
-      ClientFeature: '@lizardglobal/payload-richtext-lexical-react-native/client#TextStateFeatureClient',
+      ClientFeature: '@payloadcms/richtext-lexical/client#TextStateFeatureClient',
       clientFeatureProps: {
         state: props?.state,
       },

@@ -1,0 +1,65 @@
+{
+  "include": [
+    "src",
+    "package.json"
+  ],
+  "exclude": [
+    ".swcrc",
+    "eslint.config.js",
+    "README.md",
+    "tsconfig.json"
+  ],
+  "clean": {
+    "keep": [
+      "src/index.ts",
+      "src/exports/client/index.ts",
+      "src/exports/cssEntry.ts",
+      "src/exports/react-native",
+      "src/exports/shared.ts",
+      "src/features/converters/lexicalToReactNative"
+    ],
+    "match": [
+      "\\.(ts|tsx|mts|cts)$",
+      "\\.(js|jsx|mjs|cjs)$"
+    ]
+  },
+  "partial": {
+    "package.json": {
+      "keys": {
+        "exclude": [
+          "name",
+          "version",
+          "description",
+          "homepage",
+          "repository",
+          "author",
+          "maintainers",
+          "scripts.upstream:deps",
+          "scripts.build:types",
+          "scripts.internal:install",
+          "scripts.upstream:deps",
+          "scripts.changeset",
+          "scripts.changeset:version",
+          "scripts.release",
+          "scripts.prepublishOnly",
+          "exports[\"./react-native\"]",
+          "peerDependencies.react-native",
+          "peerDependenciesMeta.react-native",
+          "peerDependencies.payload",
+          "devDependencies.payload",
+          "peerDependencies.@payloadcms/next",
+          "devDependencies.@payloadcms/eslint-config",
+          "dependencies.@payloadcms/translations",
+          "dependencies.@payloadcms/ui",
+          "devDependencies.commander",
+          "devDependencies.@swc/cli",
+          "devDependencies.@swc/core",
+          "devDependencies.copyfiles",
+          "devDependencies.@changesets/cli",
+          "devDependencies.@changesets/changelog-github",
+          "devDependencies.rimraf"
+       ]
+      }
+    }
+  }
+}

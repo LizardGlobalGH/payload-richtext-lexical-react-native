@@ -2,7 +2,7 @@ import { createServerFeature } from '../../../utilities/createServerFeature.js'
 
 export const SuperscriptFeature = createServerFeature({
   feature: {
-    ClientFeature: '@lizardglobal/payload-richtext-lexical-react-native/client#SuperscriptFeatureClient',
+    ClientFeature: '@payloadcms/richtext-lexical/client#SuperscriptFeatureClient',
   },
   key: 'superscript',
 })

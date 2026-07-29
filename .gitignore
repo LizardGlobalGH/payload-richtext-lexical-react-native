@@ -1,3 +1,4 @@
+scripts/*.sh
 coverage
 package-lock.json
 dist

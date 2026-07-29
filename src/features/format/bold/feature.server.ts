@@ -1,9 +1,9 @@
 import { createServerFeature } from '../../../utilities/createServerFeature.js'
 import {
-    BOLD_ITALIC_STAR,
-    BOLD_ITALIC_UNDERSCORE,
-    BOLD_STAR,
-    BOLD_UNDERSCORE,
+  BOLD_ITALIC_STAR,
+  BOLD_ITALIC_UNDERSCORE,
+  BOLD_STAR,
+  BOLD_UNDERSCORE,
 } from './markdownTransformers.js'
 
 export const BoldFeature = createServerFeature({
@@ -15,7 +15,7 @@ export const BoldFeature = createServerFeature({
     }
 
     return {
-      ClientFeature: '@lizardglobal/payload-richtext-lexical-react-native/client#BoldFeatureClient',
+      ClientFeature: '@payloadcms/richtext-lexical/client#BoldFeatureClient',
       markdownTransformers,
     }
   },

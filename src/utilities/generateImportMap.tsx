@@ -11,9 +11,9 @@ export const getGenerateImportMap =
     resolvedFeatureMap: ResolvedServerFeatureMap
   }): RichTextAdapter['generateImportMap'] =>
   ({ addToImportMap, baseDir, config, importMap, imports }) => {
-    addToImportMap('@lizardglobal/payload-richtext-lexical-react-native/rsc#RscEntryLexicalCell')
-    addToImportMap('@lizardglobal/payload-richtext-lexical-react-native/rsc#RscEntryLexicalField')
-    addToImportMap('@lizardglobal/payload-richtext-lexical-react-native/rsc#LexicalDiffComponent')
+    addToImportMap('@payloadcms/richtext-lexical/rsc#RscEntryLexicalCell')
+    addToImportMap('@payloadcms/richtext-lexical/rsc#RscEntryLexicalField')
+    addToImportMap('@payloadcms/richtext-lexical/rsc#LexicalDiffComponent')
 
     for (const resolvedFeature of args.resolvedFeatureMap.values()) {
       if ('componentImports' in resolvedFeature) {
