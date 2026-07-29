@@ -1,5 +1,9 @@
 {
     "exclude": [
-        
+        ".swrc",
+        "eslint.config.js",
+        "package.json",
+        "README.md",
+        "tsconfig.json"
     ]
 }
