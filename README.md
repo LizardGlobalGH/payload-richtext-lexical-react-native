@@ -1,4 +1,8 @@
-> [!] This package is an extracted fork of the `@lizardglobal/payload-richtext-lexical-react-native` package.
+> [!WARNING]
+> This package is an extracted fork of the [`@payloadcms/richtext-lexical`](https://www.npmjs.com/package/@payloadcms/richtext-lexical) package.
+
+> [!WARNING]
+> This plugin is still **experimental**. APIs, collection schemas, and behavior may change without a stable compatibility guarantee. Use in production with caution and pin versions deliberately.
 
 This package provides a React Native implementation of the Rich Text Renderer for serialized Lexical Editor content forked from `@lizardglobal/payload-richtext-lexical-react-native`. It includes components and utilities for rendering and managing rich text content in a React Native application.
 
