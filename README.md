@@ -6,6 +6,27 @@
 
 This package provides a React Native implementation of the Rich Text Renderer for serialized Lexical Editor content forked from `@payloadcms/richtext-lexical`. It includes components and utilities for rendering and managing rich text content in a React Native application.
 
+## Table of Contents
+
+- [Installation](#installation)
+  - [Internal install](#internal-install)
+- [Usage](#usage)
+  - [Handling external links](#handling-external-links)
+  - [Primitives](#primitives)
+  - [Converters](#converters)
+- [Implementation](#implementation)
+  - [Primitives](#primitives-1)
+  - [Supported nodes and converters](#supported-nodes-and-converters)
+  - [Exposed API](#exposed-api)
+  - [Expected usage](#expected-usage)
+  - [Edge cases, risks, and concerns](#edge-cases-risks-and-concerns)
+    - [Unknown or custom node types](#unknown-or-custom-node-types)
+    - [Internal links](#internal-links)
+    - [Large document trees and render performance](#large-document-trees-and-render-performance)
+    - [Tables](#tables)
+    - [Images](#images)
+    - [URL Handling Defaults](#url-handling-defaults)
+
 # Installation
 
 Install the package using your preferred package manager:
