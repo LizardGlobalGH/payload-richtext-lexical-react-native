@@ -11,12 +11,9 @@
   ],
   "clean": {
     "keep": [
-      "src/index.ts",
       "src/exports/client/index.ts",
       "src/exports/cssEntry.ts",
-      "src/exports/react-native",
-      "src/exports/shared.ts",
-      "src/features/converters/lexicalToReactNative"
+      "src/exports/react-native"
     ],
     "match": [
       "\\.(ts|tsx|mts|cts)$",
