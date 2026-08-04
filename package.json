@@ -38,9 +38,9 @@
       "default": "./src/exports/server/rsc.ts"
     },
     "./react-native": {
-      "import": "./dist/exports/react-native/index.js",
-      "types": "./dist/exports/react-native/index.d.ts",
-      "default": "./dist/exports/react-native/index.js"
+      "import": "./src/exports/react-native/index.ts",
+      "types": "./src/exports/react-native/index.d.ts",
+      "default": "./src/exports/react-native/index.ts"
     }
   },
   "main": "./src/index.ts",
