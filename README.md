@@ -86,7 +86,7 @@ const MyComponent = () => {
 The simplest way to render Lexical content is to use the `RichText` component with your serialized data:
 
 ```tsx
-import { RichText } from "@lizardglobal/payload-richtext-lexical/react-native";
+import { RichText } from "@lizardglobal/payload-richtext-lexical-react-native/react-native";
 
 function ArticleContent({ article }) {
   return <RichText data={article.content} />;
@@ -100,7 +100,7 @@ This will render the content using default React Native primitives (`View`, `Tex
 Since React Native doesn't have automatic link handling like web browsers, you should provide an `onExternalLinkPress` handler to control how external URLs are opened:
 
 ```tsx
-import { RichText } from "@lizardglobal/payload-richtext-lexical/react-native";
+import { RichText } from "@lizardglobal/payload-richtext-lexical-react-native/react-native";
 import { Linking, Alert } from "react-native";
 
 function ArticleContent({ article }) {
@@ -127,7 +127,7 @@ function ArticleContent({ article }) {
 Primitives are the basic building blocks used to render content (e.g., `Text`, `View`, `Image`, `Pressable`). You can override these to integrate with your app's design system or add custom behavior. You only need to override the primitives you want to customize. Any primitives not specified will use the default React Native components:
 
 ```tsx
-import { RichText } from "@lizardglobal/payload-richtext-lexical/react-native";
+import { RichText } from "@lizardglobal/payload-richtext-lexical-react-native/react-native";
 import { Text as CustomText } from "@/components/ui/Text";
 import { View as CustomView } from "@/components/ui/View";
 import { Pressable as CustomPressable } from "@/components/ui/Pressable";
@@ -151,7 +151,7 @@ function ArticleContent({ article }) {
 Converters transform Lexical node types into React Native components. You can override default converters to change how specific content types are rendered:
 
 ```tsx
-import { RichText } from "@lizardglobal/payload-richtext-lexical/react-native";
+import { RichText } from "@lizardglobal/payload-richtext-lexical-react-native/react-native";
 import { View, Text } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 
