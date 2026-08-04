@@ -123,7 +123,7 @@ export function convertLexicalNodesToReactNative({
       } else {
         const TextPrimitive = context.primitives.Text
 
-        reactNode = <TextPrimitive key={i} style={{ backgroundColor: 'red' }}>unknown node</TextPrimitive>
+        reactNode = <TextPrimitive key={i}>unknown node</TextPrimitive>
       }
 
       const style: {
@@ -165,10 +165,7 @@ export function convertLexicalNodesToReactNative({
         style.paddingLeft = Number(node.indent) * 40
       }
 
-      if (
-        React.isValidElement<{ style?: unknown }>(reactNode) &&
-        (style.textAlign || style.paddingLeft)
-      ) {
+      if (React.isValidElement(reactNode) && (style.textAlign || style.paddingLeft)) {
         const existingStyle = (reactNode.props as { style?: unknown })?.style
 
         return React.cloneElement(reactNode, {

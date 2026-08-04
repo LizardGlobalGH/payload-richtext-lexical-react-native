@@ -1,7 +1,6 @@
 import React from 'react'
 
 import type { ReactNativePrimitiveOverrides, ReactNativePrimitives } from './types.js'
-import { Image, Linking, Pressable, ScrollView, Text, View } from 'react-native'
 
 type ReactNativeRuntime = {
   Image?: React.ComponentType<Record<string, unknown>>
@@ -34,12 +33,28 @@ const FallbackImage: React.FC = () => {
   return null
 }
 
+const loadReactNativeRuntime = (): ReactNativeRuntime => {
+  const possibleRequire = (globalThis as { require?: (specifier: string) => unknown }).require
+
+  if (typeof possibleRequire !== 'function') {
+    return {}
+  }
+
+  try {
+    return (possibleRequire('react-native') as ReactNativeRuntime) ?? {}
+  } catch {
+    return {}
+  }
+}
+
+const reactNativeRuntime = loadReactNativeRuntime()
+
 export const defaultReactNativePrimitives: ReactNativePrimitives = {
-  Image: Image ?? FallbackImage,
-  Pressable: Pressable ?? FallbackPressable,
-  ScrollView: ScrollView ?? FallbackScrollView,
-  Text: Text ?? FallbackText,
-  View: View ?? FallbackView,
+  Image: reactNativeRuntime.Image ?? FallbackImage,
+  Pressable: reactNativeRuntime.Pressable ?? FallbackPressable,
+  ScrollView: reactNativeRuntime.ScrollView ?? FallbackScrollView,
+  Text: reactNativeRuntime.Text ?? FallbackText,
+  View: reactNativeRuntime.View ?? FallbackView,
 }
 
 export const resolveReactNativePrimitives = (
@@ -52,7 +67,7 @@ export const resolveReactNativePrimitives = (
 }
 
 export const openExternalURL = (url: string): void => {
-  const openURL = Linking?.openURL
+  const openURL = reactNativeRuntime.Linking?.openURL
 
   if (typeof openURL === 'function') {
     Promise.resolve(openURL(url)).catch(() => {

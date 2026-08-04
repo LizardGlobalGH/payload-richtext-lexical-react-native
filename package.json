@@ -166,6 +166,11 @@
         "import": "./dist/exports/server/rsc.js",
         "types": "./dist/exports/server/rsc.d.ts",
         "default": "./dist/exports/server/rsc.js"
+      },
+      "./react-native": {
+        "import": "./dist/exports/react-native/index.js",
+        "types": "./dist/exports/react-native/index.d.ts",
+        "default": "./dist/exports/react-native/index.js"
       }
     },
     "main": "./dist/index.js",
