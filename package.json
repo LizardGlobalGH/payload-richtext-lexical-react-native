@@ -1,6 +1,6 @@
 {
   "name": "@lizardglobal/payload-richtext-lexical-react-native",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "description": "A React Native renderer for serialized Lexical content, designed to work seamlessly with Payload CMS.",
   "homepage": "https://github.com/LizardGlobalGH/payload-richtext-lexical-react-native",
   "repository": {
