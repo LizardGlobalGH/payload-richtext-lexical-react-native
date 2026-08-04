@@ -22,29 +22,34 @@
   ],
   "type": "module",
   "exports": {
+    ".": {
+      "types": "./src/exports/react-native/index.ts",
+      "import": "./src/exports/react-native/index.ts",
+      "default": "./src/exports/react-native/index.ts"
+    },
     "./client": {
-      "import": "./src/exports/client/index.ts",
       "types": "./src/exports/client/index.ts",
+      "import": "./src/exports/client/index.ts",
       "default": "./src/exports/client/index.ts"
     },
     "./react": {
-      "import": "./src/exports/react/index.ts",
       "types": "./src/exports/react/index.ts",
+      "import": "./src/exports/react/index.ts",
       "default": "./src/exports/react/index.ts"
     },
     "./rsc": {
-      "import": "./src/exports/server/rsc.ts",
       "types": "./src/exports/server/rsc.ts",
+      "import": "./src/exports/server/rsc.ts",
       "default": "./src/exports/server/rsc.ts"
     },
     "./react-native": {
+      "types": "./src/exports/react-native/index.ts",
       "import": "./src/exports/react-native/index.ts",
-      "types": "./src/exports/react-native/index.d.ts",
       "default": "./src/exports/react-native/index.ts"
     }
   },
-  "main": "./src/index.ts",
-  "types": "./src/index.ts",
+  "main": "./src/exports/react-native/index.ts",
+  "types": "./src/exports/react-native/index.ts",
   "files": [
     "dist"
   ],
@@ -152,30 +157,35 @@
   },
   "publishConfig": {
     "exports": {
+      ".": {
+        "types": "./dist/exports/react-native/index.d.ts",
+        "import": "./dist/exports/react-native/index.js",
+        "default": "./dist/exports/react-native/index.js"
+      },
       "./client": {
-        "import": "./dist/exports/client/index.js",
         "types": "./dist/exports/client/index.d.ts",
+        "import": "./dist/exports/client/index.js",
         "default": "./dist/exports/client/index.js"
       },
       "./react": {
-        "import": "./dist/exports/react/index.js",
         "types": "./dist/exports/react/index.d.ts",
+        "import": "./dist/exports/react/index.js",
         "default": "./dist/exports/react/index.js"
       },
       "./rsc": {
-        "import": "./dist/exports/server/rsc.js",
         "types": "./dist/exports/server/rsc.d.ts",
+        "import": "./dist/exports/server/rsc.js",
         "default": "./dist/exports/server/rsc.js"
       },
       "./react-native": {
-        "import": "./dist/exports/react-native/index.js",
         "types": "./dist/exports/react-native/index.d.ts",
+        "import": "./dist/exports/react-native/index.js",
         "default": "./dist/exports/react-native/index.js"
       }
     },
-    "main": "./dist/index.js",
+    "main": "./dist/exports/react-native/index.js",
     "registry": "https://registry.npmjs.org/",
-    "types": "./dist/index.d.ts"
+    "types": "./dist/exports/react-native/index.d.ts"
   },
   "peerDependenciesMeta": {
     "react-native": {
