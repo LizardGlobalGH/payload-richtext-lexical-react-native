@@ -1,5 +1,11 @@
 # @lizardglobal/payload-richtext-lexical-react-native
 
+## 0.1.3
+
+### Patch Changes
+
+- [`9356e77`](https://github.com/LizardGlobalGH/payload-richtext-lexical-react-native/commit/9356e77fe6e2d6897d2483afec184b4e5a96912b) Thanks [@joan-teriihoania](https://github.com/joan-teriihoania)! - Fix wrong package name in README
+
 ## 0.1.2
 
 ### Patch Changes
