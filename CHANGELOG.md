@@ -1,5 +1,11 @@
 # @lizardglobal/payload-richtext-lexical-react-native
 
+## 0.1.4
+
+### Patch Changes
+
+- [`ce29940`](https://github.com/LizardGlobalGH/payload-richtext-lexical-react-native/commit/ce29940af9ca20b52532abdac6b1d945f686bed6) Thanks [@joan-teriihoania](https://github.com/joan-teriihoania)! - Experimentally fix the exports
+
 ## 0.1.3
 
 ### Patch Changes
